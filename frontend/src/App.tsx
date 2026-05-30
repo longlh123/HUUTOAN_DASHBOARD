@@ -7,7 +7,6 @@ import { ServicesDashboard } from './pages/ServicesDashboard'
 import { FinanceDashboard } from './pages/FinanceDashboard'
 import { KpiSettingsPage } from './pages/KpiSettingsPage'
 import { UsersPage } from './pages/UsersPage'
-import { OppQualityPage } from './pages/OppQualityPage'
 import { LoginPage } from './pages/LoginPage'
 import { AuthCallback } from './pages/AuthCallback'
 
@@ -47,7 +46,6 @@ export default function App() {
             <Route path="/dashboard/finance"  element={<FinanceDashboard />} />
             <Route path="/settings/kpi"       element={<KpiSettingsPage />} />
             <Route path="/users"              element={<UsersPage />} />
-            <Route path="/opp-quality"        element={<OppQualityPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

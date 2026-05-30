@@ -60,6 +60,7 @@ Route::get('/crm-ping', function (CrmApiService $crm) {
 Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class])
     ->prefix('dashboard')
     ->group(function () {
+        Route::get('/sales/weekly',            [SalesController::class,        'weekly']);
         Route::get('/sales/all',              [SalesController::class,        'all']);
         Route::get('/sales/summary',          [SalesController::class,        'summary']);
         Route::get('/sales/by-period',        [SalesController::class,        'byPeriod']);

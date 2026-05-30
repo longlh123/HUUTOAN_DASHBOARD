@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { SalesSummary, PeriodData, RepData, TeamData, PipelineData, KpiQuarterly, DateRange, GroupBy } from '../api/sales'
-import { fetchAllSales, fetchPipeline } from '../api/sales'
+import type { SalesSummary, PeriodData, RepData, TeamData, PipelineData, KpiQuarterly, OppQualityRow, DateRange, GroupBy } from '../api/sales'
+import { fetchAllSales, fetchPipeline, fetchOppQuality } from '../api/sales'
 import { getPresetRange, prevYearRange } from '../utils/date'
 import { KpiCards } from '../components/KpiCards'
 import { RevenueChart } from '../components/RevenueChart'
@@ -8,21 +8,27 @@ import { SalesLeaderboard } from '../components/SalesLeaderboard'
 import { SalesTeamLeaderboard } from '../components/SalesTeamLeaderboard'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { PipelineHealth } from '../components/PipelineHealth'
+import { OppQualityTable } from '../components/OppQualityTable'
 import { TerritoryFilter } from '../components/TerritoryFilter'
+import { WeeklyWonChart } from '../components/WeeklyWonChart'
+import { TeamTargetChart } from '../components/TeamTargetChart'
 import type { Territory } from '../components/TerritoryFilter'
 import { useAuth } from '../contexts/AuthContext'
+
+type Tab = 'performance' | 'pipeline' | 'quality'
 
 export function SalesDashboard() {
   const { user } = useAuth()
   const isAdmin = user?.is_admin ?? true
 
-  const [range,       setRange]       = useState<DateRange>(getPresetRange('year'))
-  const [groupBy,     setGroupBy]     = useState<GroupBy>('quarter')
-  const [territory,   setTerritory]   = useState<Territory>(
+  const [activeTab,    setActiveTab]    = useState<Tab>('performance')
+  const [range,        setRange]        = useState<DateRange>(getPresetRange('year'))
+  const [groupBy,      setGroupBy]      = useState<GroupBy>('quarter')
+  const [territory,    setTerritory]    = useState<Territory>(
     !isAdmin && user?.territory ? user.territory as Territory : 'ALL'
   )
-  const [department,  setDepartment]  = useState<string | undefined>(undefined)
-  const [departments, setDepartments] = useState<string[]>([])
+  const [department,   setDepartment]   = useState<string | undefined>(undefined)
+  const [departments,  setDepartments]  = useState<string[]>([])
 
   const [summary,        setSummary]        = useState<SalesSummary | null>(null)
   const [prevSummary,    setPrevSummary]    = useState<SalesSummary | null>(null)
@@ -38,9 +44,12 @@ export function SalesDashboard() {
   const [pipelineData,     setPipelineData]     = useState<PipelineData | null>(null)
   const [pipelineLoading,  setPipelineLoading]  = useState(true)
   const [pipelineFetching, setPipelineFetching] = useState(false)
-  const [pipelineReached,  setPipelineReached]  = useState(false)
+  const [pipelineVisited,  setPipelineVisited]  = useState(false)
 
-  const [activeSection, setActiveSection] = useState<'performance' | 'pipeline'>('performance')
+  const [qualityData,     setQualityData]     = useState<OppQualityRow[]>([])
+  const [qualityLoading,  setQualityLoading]  = useState(true)
+  const [qualityFetching, setQualityFetching] = useState(false)
+  const [qualityVisited,  setQualityVisited]  = useState(false)
 
   useEffect(() => {
     if (!isAdmin || teamData.length === 0) return
@@ -72,47 +81,54 @@ export function SalesDashboard() {
   }, [range, groupBy, territory, department])
 
   useEffect(() => {
-    if (!pipelineReached) return
+    if (!pipelineVisited) return
     if (pipelineData === null) setPipelineLoading(true)
     setPipelineFetching(true)
     fetchPipeline(territory, department)
       .then(setPipelineData)
       .catch(() => {})
       .finally(() => { setPipelineLoading(false); setPipelineFetching(false) })
-  }, [territory, department, pipelineReached])
+  }, [territory, department, pipelineVisited])
 
   useEffect(() => {
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id as 'performance' | 'pipeline')
-            if (entry.target.id === 'pipeline') setPipelineReached(true)
-          }
-        }
-      },
-      { rootMargin: '0px 0px -80% 0px' }
-    )
-    const perf = document.getElementById('performance')
-    const pipe = document.getElementById('pipeline')
-    if (perf) obs.observe(perf)
-    if (pipe) obs.observe(pipe)
-    return () => obs.disconnect()
-  }, [])
+    if (!qualityVisited) return
+    if (qualityData.length === 0) setQualityLoading(true)
+    setQualityFetching(true)
+    fetchOppQuality(territory, department)
+      .then(setQualityData)
+      .catch(() => {})
+      .finally(() => { setQualityLoading(false); setQualityFetching(false) })
+  }, [territory, department, qualityVisited])
 
-  function scrollTo(id: 'performance' | 'pipeline') {
-    setActiveSection(id)
-    if (id === 'pipeline') setPipelineReached(true)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  function switchTab(tab: Tab) {
+    setActiveTab(tab)
+    if (tab === 'pipeline') setPipelineVisited(true)
+    if (tab === 'quality')  setQualityVisited(true)
   }
 
   return (
     <div className="dashboard">
       <div className="dashboard__header">
-        <div className="dashboard__title-row">
-          <h1 className="dashboard__title">Hieu suat ban hang</h1>
-          {fetching && !loading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
-        </div>
+        <nav className="section-nav section-nav--inline">
+          <button
+            className={`section-nav__link${activeTab === 'performance' ? ' section-nav__link--active' : ''}`}
+            onClick={() => switchTab('performance')}
+          >
+            Sales Performance
+          </button>
+          <button
+            className={`section-nav__link${activeTab === 'pipeline' ? ' section-nav__link--active' : ''}`}
+            onClick={() => switchTab('pipeline')}
+          >
+            Pipeline Health
+          </button>
+          <button
+            className={`section-nav__link${activeTab === 'quality' ? ' section-nav__link--active' : ''}`}
+            onClick={() => switchTab('quality')}
+          >
+            Opportunity Quality
+          </button>
+        </nav>
         <div className="dashboard__filters">
           {isAdmin && departments.length > 0 && (
             <div className="territory-filter">
@@ -134,44 +150,47 @@ export function SalesDashboard() {
             </div>
           )}
           <TerritoryFilter value={territory} onChange={setTerritory} disabled={!isAdmin} />
-          <DateRangeFilter onChange={(r, g) => { setRange(r); setGroupBy(g) }} />
         </div>
       </div>
 
       {error && <div className="dashboard__error">{error}</div>}
 
-      <nav className="section-nav">
-        <button
-          className={`section-nav__link${activeSection === 'performance' ? ' section-nav__link--active' : ''}`}
-          onClick={() => scrollTo('performance')}
-        >
-          Hieu suat
-        </button>
-        <button
-          className={`section-nav__link${activeSection === 'pipeline' ? ' section-nav__link--active' : ''}`}
-          onClick={() => scrollTo('pipeline')}
-        >
-          Pipeline Health
-        </button>
-      </nav>
+      {activeTab === 'performance' && (
+        <div className="dashboard-section">
+          <div className="dashboard__tab-toolbar">
+            <DateRangeFilter onChange={(r, g) => { setRange(r); setGroupBy(g) }} />
+            {fetching && !loading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
+          </div>
+          <KpiCards summary={summary} prevSummary={prevSummary} loading={loading} />
+          <RevenueChart data={periodData} prevData={prevPeriodData} loading={loading} groupBy={groupBy} quarterlyTargets={kpiQuarterly ?? undefined} />
+          <div className="row-2col">
+            <WeeklyWonChart territory={territory} department={department} />
+            <TeamTargetChart data={teamData} loading={loading} />
+          </div>
+          <SalesTeamLeaderboard data={teamData} loading={loading} />
+          <SalesLeaderboard data={repData} loading={loading} />
+        </div>
+      )}
 
-      <section id="performance" className="dashboard-section">
-        <KpiCards summary={summary} prevSummary={prevSummary} loading={loading} />
-        <RevenueChart data={periodData} prevData={prevPeriodData} loading={loading} groupBy={groupBy} quarterlyTargets={kpiQuarterly ?? undefined} />
-        <SalesTeamLeaderboard data={teamData} loading={loading} />
-        <SalesLeaderboard data={repData} loading={loading} />
-      </section>
-
-      <section id="pipeline" className="dashboard-section">
-        <div className="section-divider">
-          <div className="dashboard__title-row">
-            <h2 className="section-divider__title">Pipeline Health</h2>
+      {activeTab === 'pipeline' && (
+        <div className="dashboard-section">
+          <div className="dashboard__tab-toolbar">
+            <p className="section-divider__sub">Cac co hoi dang mo — khong loc theo ngay</p>
             {pipelineFetching && !pipelineLoading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
           </div>
-          <p className="section-divider__sub">Cac co hoi dang mo — khong loc theo ngay</p>
+          <PipelineHealth data={pipelineData} loading={pipelineLoading} />
         </div>
-        <PipelineHealth data={pipelineData} loading={pipelineLoading} />
-      </section>
+      )}
+
+      {activeTab === 'quality' && (
+        <div className="dashboard-section">
+          <div className="dashboard__tab-toolbar">
+            <p className="section-divider__sub">Do chat luong nhap lieu va quy trinh cham soc — chi tinh Opp chua co hop dong won</p>
+            {qualityFetching && !qualityLoading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
+          </div>
+          <OppQualityTable data={qualityData} loading={qualityLoading} />
+        </div>
+      )}
     </div>
   )
 }

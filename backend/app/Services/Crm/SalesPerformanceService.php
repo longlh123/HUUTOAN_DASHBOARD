@@ -267,6 +267,39 @@ class SalesPerformanceService
             );
     }
 
+    public function weeklyDeals(int $weekOffset = 0, ?string $territory = null, ?string $department = null): array
+    {
+        $monday = now()->startOfWeek(Carbon::MONDAY)->addWeeks($weekOffset)->startOfDay();
+        $sunday = now()->endOfWeek(Carbon::SUNDAY)->addWeeks($weekOffset)->endOfDay();
+
+        $quotes = $this->resolveQuoteValues(
+            $this->filterByTerritory(
+                $this->filterByDepartment($this->fetchWonQuotes($monday, $sunday), $department),
+                $territory
+            ),
+            300
+        );
+
+        $byDay  = $quotes->groupBy(fn ($q) => Carbon::parse($q['closedon'])->format('Y-m-d'));
+        $labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        $result = [];
+
+        for ($i = 0; $i < 7; $i++) {
+            $date  = $monday->copy()->addDays($i);
+            $key   = $date->toDateString();
+            $items = $byDay->get($key, collect());
+
+            $result[] = [
+                'day'   => $labels[$i],
+                'date'  => $key,
+                'count' => $items->pluck('_opportunityid_value')->filter()->unique()->count(),
+                'value' => (int) round($items->sum('resolved_value')),
+            ];
+        }
+
+        return $result;
+    }
+
     // Won quotes only (statecode=2) — dùng cho byPeriod
     private function fetchWonQuotes(Carbon $from, Carbon $to): Collection
     {

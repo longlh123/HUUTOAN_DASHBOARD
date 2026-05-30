@@ -81,6 +81,17 @@ class SalesController extends Controller
         return $this->success($this->sales->byTeam($from, $to, $request->query('territory'), $request->query('department')));
     }
 
+    public function weekly(Request $request): JsonResponse
+    {
+        $weekOffset = max(-52, min(0, (int) $request->query('week_offset', 0)));
+
+        return $this->success($this->sales->weeklyDeals(
+            $weekOffset,
+            $request->query('territory'),
+            $request->query('department')
+        ));
+    }
+
     private function parseDateRange(Request $request): array
     {
         $from = Carbon::parse($request->query('from', now()->startOfYear()->toDateString()));

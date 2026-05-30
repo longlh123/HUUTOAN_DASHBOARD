@@ -137,6 +137,13 @@ export type OppQualityRow = {
   backdated:         number
 }
 
+export type WeeklyDealItem = {
+  day:   string   // "T2" | "T3" | "T4" | "T5" | "T6" | "T7" | "CN"
+  date:  string   // "2026-05-25"
+  count: number
+  value: number
+}
+
 export type DateRange = { from: string; to: string }
 export type GroupBy   = 'day' | 'week' | 'month' | 'quarter'
 
@@ -201,6 +208,9 @@ async function apiDelete(url: string): Promise<void> {
 function qs(range: DateRange, extra: Record<string, string> = {}): string {
   return new URLSearchParams({ from: range.from, to: range.to, ...extra }).toString()
 }
+
+export const fetchWeeklyDeals = (territory: string, weekOffset: number, department?: string) =>
+  apiFetch<WeeklyDealItem[]>(`${BASE}/weekly?${new URLSearchParams({ territory, week_offset: String(weekOffset), ...(department ? { department } : {}) })}`)
 
 export const fetchAllSales = (range: DateRange, groupBy: GroupBy, territory: string, department?: string) =>
   apiFetch<SalesAll>(`${BASE}/all?${qs(range, { group_by: groupBy, territory, ...(department ? { department } : {}) })}`)
