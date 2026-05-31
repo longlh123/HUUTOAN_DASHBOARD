@@ -1,0 +1,57 @@
+# ========================
+# Laravel (backend)
+# ========================
+backend/.env
+backend/.env.backup
+backend/.env.*.local
+backend/vendor/
+backend/node_modules/
+backend/storage/app/public/*
+backend/storage/framework/cache/*
+backend/storage/framework/sessions/*
+backend/storage/framework/testing/*
+backend/storage/framework/views/*
+backend/storage/logs/*.log
+backend/bootstrap/cache/*.php
+backend/public/hot
+backend/public/storage
+ 
+# ========================
+# React / Vite (frontend)
+# ========================
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+ 
+# ========================
+# Root
+# ========================
+node_modules/
+package-lock.json
+ 
+# ========================
+# IDE / Editor
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+ 
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+ 
+# ========================
+# Claude Code
+# ========================
+.claude/
+docs/
+ 
+# ========================
+# Docker
+# ========================
+docker/*/local/
