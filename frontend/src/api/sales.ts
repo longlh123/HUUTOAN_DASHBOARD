@@ -54,6 +54,13 @@ export type AgingOpp = {
   stage: string
 }
 
+export type GapToTargetItem = {
+  quarter: string
+  target:  number
+  actual:  number
+  gap:     number
+}
+
 export type PipelineData = {
   pipeline_value: number
   opportunity_count: number
@@ -137,6 +144,13 @@ export type OppQualityRow = {
   backdated:         number
 }
 
+export type TopAccountItem = {
+  account_id:  string
+  name:        string
+  total_value: number
+  deals:       number
+}
+
 export type WeeklyDealItem = {
   day:   string   // "T2" | "T3" | "T4" | "T5" | "T6" | "T7" | "CN"
   date:  string   // "2026-05-25"
@@ -209,6 +223,9 @@ function qs(range: DateRange, extra: Record<string, string> = {}): string {
   return new URLSearchParams({ from: range.from, to: range.to, ...extra }).toString()
 }
 
+export const fetchTopAccounts = (range: DateRange, territory: string, department?: string) =>
+  apiFetch<TopAccountItem[]>(`${BASE}/top-accounts?${qs(range, { territory, ...(department ? { department } : {}) })}`)
+
 export const fetchWeeklyDeals = (territory: string, weekOffset: number, department?: string) =>
   apiFetch<WeeklyDealItem[]>(`${BASE}/weekly?${new URLSearchParams({ territory, week_offset: String(weekOffset), ...(department ? { department } : {}) })}`)
 
@@ -229,6 +246,9 @@ export const fetchByTeam   = (range: DateRange, territory: string, department?: 
 
 export const fetchPipeline = (territory: string, department?: string) =>
   apiFetch<PipelineData>(`${OPP_BASE}/pipeline?${new URLSearchParams({ territory, ...(department ? { department } : {}) })}`)
+
+export const fetchGapToTarget = (year: number, territory: string, department?: string) =>
+  apiFetch<GapToTargetItem[]>(`${BASE}/gap-to-target?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)
 
 export const fetchOppQuality = (territory: string, department?: string) =>
   apiFetch<OppQualityRow[]>(`${OPP_BASE}/quality?${new URLSearchParams({ territory, ...(department ? { department } : {}) })}`)

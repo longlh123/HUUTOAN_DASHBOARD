@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { SalesSummary, PeriodData, RepData, TeamData, PipelineData, KpiQuarterly, OppQualityRow, DateRange, GroupBy } from '../api/sales'
-import { fetchAllSales, fetchPipeline, fetchOppQuality } from '../api/sales'
+import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, KpiQuarterly, OppQualityRow, DateRange, GroupBy } from '../api/sales'
+import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchOppQuality } from '../api/sales'
 import { getPresetRange, prevYearRange } from '../utils/date'
 import { KpiCards } from '../components/KpiCards'
 import { RevenueChart } from '../components/RevenueChart'
@@ -12,6 +12,7 @@ import { OppQualityTable } from '../components/OppQualityTable'
 import { TerritoryFilter } from '../components/TerritoryFilter'
 import { WeeklyWonChart } from '../components/WeeklyWonChart'
 import { TeamTargetChart } from '../components/TeamTargetChart'
+import { TopAccountsTable } from '../components/TopAccountsTable'
 import type { Territory } from '../components/TerritoryFilter'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -28,13 +29,11 @@ export function SalesDashboard() {
     !isAdmin && user?.territory ? user.territory as Territory : 'ALL'
   )
   const [department,   setDepartment]   = useState<string | undefined>(undefined)
-  const [departments,  setDepartments]  = useState<string[]>([])
 
   const [summary,        setSummary]        = useState<SalesSummary | null>(null)
   const [prevSummary,    setPrevSummary]    = useState<SalesSummary | null>(null)
   const [periodData,     setPeriodData]     = useState<PeriodData[]>([])
   const [prevPeriodData, setPrevPeriodData] = useState<PeriodData[]>([])
-  const [repData,        setRepData]        = useState<RepData[]>([])
   const [teamData,       setTeamData]       = useState<TeamData[]>([])
   const [kpiQuarterly,   setKpiQuarterly]   = useState<KpiQuarterly | null>(null)
   const [loading,        setLoading]        = useState(true)
@@ -46,21 +45,17 @@ export function SalesDashboard() {
   const [pipelineFetching, setPipelineFetching] = useState(false)
   const [pipelineVisited,  setPipelineVisited]  = useState(false)
 
+  const [gapData,    setGapData]    = useState<GapToTargetItem[]>([])
+  const [gapLoading, setGapLoading] = useState(true)
+
   const [qualityData,     setQualityData]     = useState<OppQualityRow[]>([])
   const [qualityLoading,  setQualityLoading]  = useState(true)
   const [qualityFetching, setQualityFetching] = useState(false)
   const [qualityVisited,  setQualityVisited]  = useState(false)
 
-  useEffect(() => {
-    if (!isAdmin || teamData.length === 0) return
-    setDepartments(prev => {
-      if (prev.length > 0) return prev
-      return Array.from(new Set(teamData.map(t => t.department).filter(Boolean))).sort()
-    })
-  }, [isAdmin, teamData])
+  const [allDepartments, setAllDepartments] = useState<string[]>([])
 
   useEffect(() => {
-    if (summary === null) setLoading(true)
     setFetching(true)
     setError(null)
     Promise.all([
@@ -72,9 +67,17 @@ export function SalesDashboard() {
         setPrevSummary(prev.summary)
         setPeriodData(curr.by_period)
         setPrevPeriodData(prev.by_period)
-        setRepData(curr.by_rep)
+
         setTeamData(curr.by_team)
         setKpiQuarterly(curr.kpi)
+
+        // Chỉ cập nhật danh sách allDepartments khi fetch không có department filter
+        // để tránh mất các department khác khi đang lọc
+        if (!department && isAdmin) {
+          setAllDepartments(
+            Array.from(new Set(curr.by_team.map((t: TeamData) => t.department).filter(Boolean))).sort() as string[]
+          )
+        }
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => { setLoading(false); setFetching(false) })
@@ -82,7 +85,6 @@ export function SalesDashboard() {
 
   useEffect(() => {
     if (!pipelineVisited) return
-    if (pipelineData === null) setPipelineLoading(true)
     setPipelineFetching(true)
     fetchPipeline(territory, department)
       .then(setPipelineData)
@@ -91,8 +93,17 @@ export function SalesDashboard() {
   }, [territory, department, pipelineVisited])
 
   useEffect(() => {
+    if (!pipelineVisited) return
+    setGapLoading(true)
+    const year = parseInt(range.from.slice(0, 4))
+    fetchGapToTarget(year, territory, department)
+      .then(setGapData)
+      .catch(() => {})
+      .finally(() => setGapLoading(false))
+  }, [territory, department, range, pipelineVisited])
+
+  useEffect(() => {
     if (!qualityVisited) return
-    if (qualityData.length === 0) setQualityLoading(true)
     setQualityFetching(true)
     fetchOppQuality(territory, department)
       .then(setQualityData)
@@ -130,7 +141,7 @@ export function SalesDashboard() {
           </button>
         </nav>
         <div className="dashboard__filters">
-          {isAdmin && departments.length > 0 && (
+          {isAdmin && allDepartments.length > 0 && (
             <div className="territory-filter">
               <button
                 className={`date-filter__btn${department === undefined ? ' date-filter__btn--active' : ''}`}
@@ -138,7 +149,7 @@ export function SalesDashboard() {
               >
                 Tat ca
               </button>
-              {departments.map(d => (
+              {allDepartments.map(d => (
                 <button
                   key={d}
                   className={`date-filter__btn${department === d ? ' date-filter__btn--active' : ''}`}
@@ -167,8 +178,9 @@ export function SalesDashboard() {
             <WeeklyWonChart territory={territory} department={department} />
             <TeamTargetChart data={teamData} loading={loading} />
           </div>
-          <SalesTeamLeaderboard data={teamData} loading={loading} />
-          <SalesLeaderboard data={repData} loading={loading} />
+          <SalesTeamLeaderboard territory={territory} department={department} range={range} />
+          <SalesLeaderboard territory={territory} department={department} range={range} />
+          <TopAccountsTable territory={territory} department={department} range={range} />
         </div>
       )}
 
@@ -178,7 +190,7 @@ export function SalesDashboard() {
             <p className="section-divider__sub">Cac co hoi dang mo — khong loc theo ngay</p>
             {pipelineFetching && !pipelineLoading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
           </div>
-          <PipelineHealth data={pipelineData} loading={pipelineLoading} />
+          <PipelineHealth data={pipelineData} loading={pipelineLoading} gapData={gapData} gapLoading={gapLoading} />
         </div>
       )}
 

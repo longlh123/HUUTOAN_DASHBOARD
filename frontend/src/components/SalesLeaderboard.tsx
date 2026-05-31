@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { RepData } from '../api/sales'
+import type { RepData, DateRange } from '../api/sales'
+import { fetchByRep } from '../api/sales'
 import { fmtVNDFull } from '../utils/format'
+import { getQuarterRange, getYearRange } from '../utils/date'
 
 function kpiPct(value: number, kpi: number | null): number | null {
   if (!kpi || kpi <= 0) return null
@@ -14,21 +16,42 @@ function kpiLevel(pct: number): 'high' | 'mid' | 'low' {
 }
 
 type Props = {
-  data: RepData[]
-  loading: boolean
+  territory:   string
+  department?: string
+  range:       DateRange
 }
 
 const PAGE_SIZE = 10
 
-export function SalesLeaderboard({ data, loading }: Props) {
-  const [page, setPage] = useState(0)
+export function SalesLeaderboard({ territory, department, range }: Props) {
+  const [quarter,  setQuarter]  = useState<0 | 1 | 2 | 3 | 4>(0)
+  const [data,     setData]     = useState<RepData[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [fetching, setFetching] = useState(false)
+  const [page,     setPage]     = useState(0)
   const [teamFilter, setTeamFilter] = useState<string>('ALL')
 
-  const teams = Array.from(new Set(data.map(r => r.team).filter(Boolean))).sort()
+  useEffect(() => {
+    setFetching(true)
+    const year       = parseInt(range.from.slice(0, 4))
+    const fetchRange = quarter === 0 ? getYearRange(year) : getQuarterRange(year, quarter)
+    fetchByRep(fetchRange, territory, department)
+      .then(d => { setData(d); setPage(0) })
+      .catch(() => {})
+      .finally(() => { setLoading(false); setFetching(false) })
+  }, [territory, department, range, quarter])
 
+  const teams    = Array.from(new Set(data.map(r => r.team).filter(Boolean))).sort()
   const filtered = teamFilter === 'ALL' ? data : data.filter(r => r.team === teamFilter)
 
-  useEffect(() => { setPage(0) }, [data, teamFilter])
+  const attainment = (() => {
+    const withKpi = filtered.filter(r => r.kpi && r.kpi > 0)
+    if (withKpi.length === 0) return null
+    const on   = withKpi.filter(r => r.total_value / r.kpi! >= 1).length
+    const risk = withKpi.filter(r => { const p = r.total_value / r.kpi!; return p >= 0.5 && p < 1 }).length
+    const behind = withKpi.filter(r => r.total_value / r.kpi! < 0.5).length
+    return { on, risk, behind, total: withKpi.length }
+  })()
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
   const pageData   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
@@ -37,22 +60,31 @@ export function SalesLeaderboard({ data, loading }: Props) {
     <div className="card">
       <div className="leaderboard__toolbar">
         <h2 className="card__title" style={{ marginBottom: 0 }}>Xep hang Salesperson</h2>
-        <div className="leaderboard__team-filter">
-          <button
-            className={`date-filter__btn${teamFilter === 'ALL' ? ' date-filter__btn--active' : ''}`}
-            onClick={() => setTeamFilter('ALL')}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {fetching && !loading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
+          <select
+            className="leaderboard__team-select"
+            value={teamFilter}
+            onChange={e => { setTeamFilter(e.target.value); setPage(0) }}
           >
-            Tat ca
-          </button>
-          {teams.map(team => (
-            <button
-              key={team}
-              className={`date-filter__btn${teamFilter === team ? ' date-filter__btn--active' : ''}`}
-              onClick={() => setTeamFilter(team)}
-            >
-              {team}
-            </button>
-          ))}
+            <option value="ALL">Tat ca team</option>
+            {teams.map(team => (
+              <option key={team} value={team}>{team}</option>
+            ))}
+          </select>
+          <div className="date-filter">
+            <div className="date-filter__presets">
+              {([0, 1, 2, 3, 4] as const).map(q => (
+                <button
+                  key={q}
+                  className={`date-filter__btn${quarter === q ? ' date-filter__btn--active' : ''}`}
+                  onClick={() => { setQuarter(q); setPage(0) }}
+                >
+                  {q === 0 ? 'Tat ca' : `Q${q}`}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -62,7 +94,24 @@ export function SalesLeaderboard({ data, loading }: Props) {
         <p className="table-placeholder">Khong co du lieu</p>
       ) : (
         <>
-          <div className="table-wrap">
+          {attainment && (
+            <div className="attainment-strip">
+              <div className="attainment-strip__item attainment-strip__item--on">
+                <span className="attainment-strip__count">{attainment.on}</span>
+                <span className="attainment-strip__label">Dat &ge; 100%</span>
+              </div>
+              <div className="attainment-strip__item attainment-strip__item--risk">
+                <span className="attainment-strip__count">{attainment.risk}</span>
+                <span className="attainment-strip__label">50 – 99%</span>
+              </div>
+              <div className="attainment-strip__item attainment-strip__item--behind">
+                <span className="attainment-strip__count">{attainment.behind}</span>
+                <span className="attainment-strip__label">Duoi 50%</span>
+              </div>
+              <span className="attainment-strip__sub">/ {attainment.total} nguoi co KPI</span>
+            </div>
+          )}
+          <div className={`table-wrap${fetching && !loading ? ' chart-wrap--loading' : ''}`}>
             <table className="leaderboard">
               <thead>
                 <tr>

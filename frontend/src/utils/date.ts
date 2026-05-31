@@ -42,6 +42,7 @@ export function prevYearRange(range: DateRange): DateRange {
 }
 
 // Dùng cho initial state trong SalesDashboard
-export function getPresetRange(_preset: 'year'): DateRange {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function getPresetRange(_: 'year'): DateRange {
   return getYearRange(new Date().getFullYear())
 }
