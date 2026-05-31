@@ -1,5 +1,8 @@
-import type { TeamData } from '../api/sales'
+import { useEffect, useState } from 'react'
+import type { TeamData, DateRange } from '../api/sales'
+import { fetchByTeam } from '../api/sales'
 import { fmtVNDFull } from '../utils/format'
+import { getQuarterRange, getYearRange } from '../utils/date'
 
 function kpiPct(value: number, kpi: number | null): number | null {
   if (!kpi || kpi <= 0) return null
@@ -13,24 +16,58 @@ function kpiLevel(pct: number): 'high' | 'mid' | 'low' {
 }
 
 type Props = {
-  data: TeamData[]
-  loading: boolean
+  territory:   string
+  department?: string
+  range:       DateRange
 }
 
-export function SalesTeamLeaderboard({ data, loading }: Props) {
+export function SalesTeamLeaderboard({ territory, department, range }: Props) {
+  const [quarter,  setQuarter]  = useState<0 | 1 | 2 | 3 | 4>(0)
+  const [data,     setData]     = useState<TeamData[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [fetching, setFetching] = useState(false)
+
+  useEffect(() => {
+    setFetching(true)
+    const year      = parseInt(range.from.slice(0, 4))
+    const fetchRange = quarter === 0 ? getYearRange(year) : getQuarterRange(year, quarter)
+    fetchByTeam(fetchRange, territory, department)
+      .then(setData)
+      .catch(() => {})
+      .finally(() => { setLoading(false); setFetching(false) })
+  }, [territory, department, range, quarter])
+
   const grouped = groupByDepartment(data)
   let globalRank = 0
 
   return (
     <div className="card">
-      <h2 className="card__title">Xep hang theo Team</h2>
+      <div className="chart-header">
+        <h2 className="card__title">Xep hang theo Team</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {fetching && !loading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
+          <div className="date-filter">
+            <div className="date-filter__presets">
+              {([0, 1, 2, 3, 4] as const).map(q => (
+                <button
+                  key={q}
+                  className={`date-filter__btn${quarter === q ? ' date-filter__btn--active' : ''}`}
+                  onClick={() => setQuarter(q)}
+                >
+                  {q === 0 ? 'Tat ca' : `Q${q}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {loading && data.length === 0 ? (
         <p className="table-placeholder">Dang tai...</p>
       ) : data.length === 0 ? (
         <p className="table-placeholder">Khong co du lieu</p>
       ) : (
-        <div className="table-wrap">
+        <div className={`table-wrap${fetching && !loading ? ' chart-wrap--loading' : ''}`}>
           <table className="leaderboard">
             <thead>
               <tr>
@@ -40,6 +77,7 @@ export function SalesTeamLeaderboard({ data, loading }: Props) {
                 <th className="hide-sm" style={{ textAlign: 'right' }}>Won</th>
                 <th className="hide-sm" style={{ textAlign: 'right' }}>Lost</th>
                 <th style={{ textAlign: 'right' }}>Win Rate</th>
+                <th className="hide-sm" style={{ textAlign: 'right' }}>Gia Tri TB</th>
                 <th className="hide-sm" style={{ textAlign: 'right' }}>Toc do chot</th>
                 <th className="hide-sm">% KPI</th>
               </tr>
@@ -48,7 +86,7 @@ export function SalesTeamLeaderboard({ data, loading }: Props) {
               {grouped.map(([dept, teams]) => (
                 <>
                   <tr key={`dept-${dept}`} className="leaderboard__dept-header">
-                    <td colSpan={8}>{dept || 'Khac'}</td>
+                    <td colSpan={9}>{dept || 'Khac'}</td>
                   </tr>
                   {teams.map((team) => {
                     globalRank++
@@ -64,6 +102,7 @@ export function SalesTeamLeaderboard({ data, loading }: Props) {
                             {team.win_rate}%
                           </span>
                         </td>
+                        <td className="hide-sm leaderboard__value">{fmtVNDFull(team.avg_deal_size)}</td>
                         <td className="hide-sm leaderboard__num">
                           {team.avg_days_to_close != null
                             ? <span className={`speed-badge speed-badge--${speedLevel(team.avg_days_to_close)}`}>{team.avg_days_to_close} ngay</span>

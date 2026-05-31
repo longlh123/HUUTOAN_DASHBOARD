@@ -15,7 +15,7 @@ export function AuthCallback() {
     login(token)
       .then(() => navigate('/dashboard/sales', { replace: true }))
       .catch(() => navigate('/login', { replace: true }))
-  }, [])
+  }, [login, navigate])
 
   return (
     <div className="login-page">

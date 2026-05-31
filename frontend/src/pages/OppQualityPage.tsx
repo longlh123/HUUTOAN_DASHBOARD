@@ -19,7 +19,6 @@ export function OppQualityPage() {
   const [error,    setError]    = useState<string | null>(null)
 
   useEffect(() => {
-    if (data.length === 0) setLoading(true)
     setFetching(true)
     setError(null)
     fetchOppQuality(territory)
