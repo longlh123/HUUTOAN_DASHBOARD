@@ -560,6 +560,31 @@ class SalesPerformanceService
             ->sortByDesc('days_open')
             ->values();
 
+        $urgencyWeight = fn ($o) => match (true) {
+            !empty($o['estimatedclosedate']) && Carbon::parse($o['estimatedclosedate'])->lte($now->copy()->addDays(30)) => 1.5,
+            !empty($o['estimatedclosedate']) && Carbon::parse($o['estimatedclosedate'])->lte($now->copy()->addDays(60)) => 1.2,
+            default => 1.0,
+        };
+
+        $topWin = $opps
+            ->sortByDesc(fn ($o) =>
+                $maxQuoteValue($o) * (1 + (float) ($o['closeprobability'] ?? 0) / 100) * $urgencyWeight($o)
+            )
+            ->take(10)
+            ->map(fn ($o) => [
+                'opp_number'       => $o['ab_opportunitynumber'] ?? '',
+                'crm_link'         => config('crm.base_url') . '/main.aspx?etn=opportunity&id=' . ($o['opportunityid'] ?? '') . '&pagetype=entityrecord',
+                'name'             => $o['name'] ?? '',
+                'owner'            => $o['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
+                'stage'            => $o['stepname'] ?? '',
+                'close_probability'=> (int) ($o['closeprobability'] ?? 0),
+                'estimated_close'  => !empty($o['estimatedclosedate'])
+                    ? Carbon::parse($o['estimatedclosedate'])->toDateString()
+                    : null,
+                'value'            => $maxQuoteValue($o),
+            ])
+            ->values();
+
         return [
             'pipeline_value'    => round($pipelineValue),
             'opportunity_count' => $count,
@@ -569,6 +594,7 @@ class SalesPerformanceService
             'forecast_60d'      => round($f60),
             'forecast_90d'      => round($f90),
             'aging'             => $aging->toArray(),
+            'top_win'           => $topWin->toArray(),
         ];
     }
 
@@ -712,7 +738,7 @@ class SalesPerformanceService
     private function fetchOpenOpportunities(): Collection
     {
         $data = $this->api->get('opportunities', [
-            '$select'  => 'opportunityid,name,estimatedvalue,closeprobability,stepname,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value',
+            '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,stepname,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value',
             '$filter'  => 'statecode eq 0',
             '$orderby' => 'createdon desc',
             '$top'     => '500',
