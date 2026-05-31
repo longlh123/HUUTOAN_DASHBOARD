@@ -81,6 +81,27 @@ class SalesController extends Controller
         return $this->success($this->sales->byTeam($from, $to, $request->query('territory'), $request->query('department')));
     }
 
+    public function topAccounts(Request $request): JsonResponse
+    {
+        [$from, $to] = $this->parseDateRange($request);
+
+        return $this->success($this->sales->topAccounts(
+            $from, $to,
+            $request->query('territory'),
+            $request->query('department')
+        ));
+    }
+
+    public function gapToTarget(Request $request): JsonResponse
+    {
+        $year = (int) $request->query('year', now()->year);
+        return $this->success($this->sales->quarterlyGapChart(
+            $year,
+            $request->query('territory'),
+            $request->query('department')
+        ));
+    }
+
     public function weekly(Request $request): JsonResponse
     {
         $weekOffset = max(-52, min(0, (int) $request->query('week_offset', 0)));
