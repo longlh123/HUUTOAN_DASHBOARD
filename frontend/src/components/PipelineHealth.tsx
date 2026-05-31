@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { PipelineData, GapToTargetItem } from '../api/sales'
 import { fmtVND, fmtVNDFull } from '../utils/format'
 
@@ -8,18 +9,43 @@ type Props = {
   gapLoading: boolean
 }
 
+const PAGE_SIZE = 10
 const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3)
 
+function probLevel(prob: number): string {
+  if (prob >= 70) return 'high'
+  if (prob >= 40) return 'mid'
+  return 'low'
+}
+
+function fmtDate(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`
+}
+
+function isUrgent(iso: string | null, days: number): boolean {
+  if (!iso) return false
+  const diff = (new Date(iso).getTime() - Date.now()) / 86_400_000
+  return diff >= 0 && diff <= days
+}
+
 export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
+  const [agingPage, setAgingPage] = useState(0)
+
   if (loading && !data) {
     return <p className="table-placeholder">Dang tai...</p>
   }
   if (!data) return null
 
-  const currentGap = gapData.find(d => d.quarter === `Q${currentQuarter}`)
+  const currentGap  = gapData.find(d => d.quarter === `Q${currentQuarter}`)
   const attainment  = currentGap && currentGap.target > 0
     ? Math.min(100, Math.round(currentGap.actual / currentGap.target * 100))
     : 0
+
+  const agingTotal = data.aging.length
+  const agingPages = Math.ceil(agingTotal / PAGE_SIZE)
+  const agingSlice = data.aging.slice(agingPage * PAGE_SIZE, (agingPage + 1) * PAGE_SIZE)
 
   return (
     <div className="pipeline-health">
@@ -111,7 +137,54 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
         )}
       </div>
 
-      {data.aging.length > 0 && (
+      {(data.top_win ?? []).length > 0 && (
+        <div className="card">
+          <h2 className="card__title">Top 10 Co hoi nen tap trung</h2>
+          <table className="leaderboard">
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'right' }}>#</th>
+                <th>Ma</th>
+                <th>Co hoi</th>
+                <th>Salesperson</th>
+                <th>Giai doan</th>
+                <th style={{ textAlign: 'right' }}>Xac suat</th>
+                <th style={{ textAlign: 'right' }}>Du kien chot</th>
+                <th style={{ textAlign: 'right' }}>Gia tri</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(data.top_win ?? []).map((opp, i) => (
+                <tr key={i}>
+                  <td className="leaderboard__rank">{i + 1}</td>
+                  <td>
+                    {opp.crm_link
+                      ? <a href={opp.crm_link} target="_blank" rel="noreferrer" className="crm-link">
+                          {opp.opp_number || 'Xem CRM'} ↗
+                        </a>
+                      : <span>{opp.opp_number || '—'}</span>
+                    }
+                  </td>
+                  <td className="leaderboard__name">{opp.name}</td>
+                  <td>{opp.owner}</td>
+                  <td>{opp.stage}</td>
+                  <td className="leaderboard__num">
+                    <span className={`win-rate win-rate--${probLevel(opp.close_probability)}`}>
+                      {opp.close_probability}%
+                    </span>
+                  </td>
+                  <td className="leaderboard__num" style={isUrgent(opp.estimated_close, 30) ? { color: 'var(--accent)', fontWeight: 600 } : undefined}>
+                    {fmtDate(opp.estimated_close)}
+                  </td>
+                  <td className="leaderboard__value">{fmtVNDFull(opp.value)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {agingTotal > 0 && (
         <div className="card">
           <h2 className="card__title">Co hoi hang hoa (&gt;90 ngay)</h2>
           <table className="leaderboard">
@@ -125,7 +198,7 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
               </tr>
             </thead>
             <tbody>
-              {data.aging.map((opp, i) => (
+              {agingSlice.map((opp, i) => (
                 <tr key={i}>
                   <td>{opp.name}</td>
                   <td>{opp.owner}</td>
@@ -136,6 +209,27 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
               ))}
             </tbody>
           </table>
+          {agingPages > 1 && (
+            <div className="pagination">
+              <button
+                className="pagination__btn"
+                disabled={agingPage === 0}
+                onClick={() => setAgingPage(p => p - 1)}
+              >
+                &laquo; Truoc
+              </button>
+              <span className="pagination__info">
+                Trang {agingPage + 1} / {agingPages} ({agingTotal} co hoi)
+              </span>
+              <button
+                className="pagination__btn"
+                disabled={agingPage >= agingPages - 1}
+                onClick={() => setAgingPage(p => p + 1)}
+              >
+                Tiep &raquo;
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

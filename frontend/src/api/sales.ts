@@ -54,6 +54,17 @@ export type AgingOpp = {
   stage: string
 }
 
+export type TopWinOpp = {
+  opp_number: string
+  crm_link: string
+  name: string
+  owner: string
+  stage: string
+  close_probability: number
+  estimated_close: string | null
+  value: number
+}
+
 export type GapToTargetItem = {
   quarter: string
   target:  number
@@ -70,6 +81,7 @@ export type PipelineData = {
   forecast_60d: number
   forecast_90d: number
   aging: AgingOpp[]
+  top_win: TopWinOpp[]
 }
 
 export type KpiTarget = {

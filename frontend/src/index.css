@@ -356,6 +356,20 @@ input  { font-family: inherit; }
   text-align: left;
 }
 
+.crm-link {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.crm-link:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
 .leaderboard__value {
   font-weight: 600;
   color: var(--accent) !important;
