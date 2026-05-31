@@ -3,12 +3,11 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 const NAV_ITEMS = [
-  { to: '/dashboard/sales',    label: 'Dashboard',     adminOnly: false },
-  { to: '/dashboard/services', label: 'Services',      adminOnly: false },
-  { to: '/dashboard/finance',  label: 'Finance',       adminOnly: false },
-  { to: '/opp-quality',        label: 'Chat luong Opp', adminOnly: false },
-  { to: '/users',              label: 'Users',         adminOnly: true },
-  { to: '/settings/kpi',       label: 'Cai dat KPI',   adminOnly: true },
+  { to: '/dashboard/sales',    label: 'Dashboard',   adminOnly: false },
+  { to: '/dashboard/services', label: 'Services',    adminOnly: false },
+  { to: '/dashboard/finance',  label: 'Finance',     adminOnly: false },
+  { to: '/users',              label: 'Users',       adminOnly: true },
+  { to: '/settings/kpi',       label: 'Cai dat KPI', adminOnly: true },
 ]
 
 export function AppLayout() {
