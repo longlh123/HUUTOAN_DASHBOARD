@@ -173,6 +173,15 @@ export type OppActivityRow = {
   last_opp_created:   string | null
 }
 
+export type RequestTypeCrosstab = {
+  labels:        Record<string, string>
+  codes:         string[]
+  departments:   string[]
+  rows:          { code: string; by_dept: Record<string, number>; total: number }[]
+  column_totals: Record<string, number>
+  grand_total:   number
+}
+
 export type TopAccountItem = {
   account_id:  string
   name:        string
@@ -284,6 +293,9 @@ export const fetchOppQuality = (territory: string, department?: string) =>
 
 export const fetchOppActivity = (range: DateRange, territory: string, department?: string) =>
   apiFetch<OppActivityRow[]>(`${OPP_BASE}/activity?${qs(range, { territory, ...(department ? { department } : {}) })}`)
+
+export const fetchRequestTypeCrosstab = (year: number, territory: string, department?: string) =>
+  apiFetch<RequestTypeCrosstab>(`${BASE}/request-type?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)
 
 export const fetchKpiQuarterly = (year: number, territory: string, department?: string) =>
   apiFetch<KpiQuarterly>(`${BASE}/kpi-quarterly?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)

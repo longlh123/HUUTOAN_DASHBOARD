@@ -7,6 +7,8 @@ use Illuminate\Support\Collection;
 
 class SalesPerformanceService
 {
+    private const GENSET_LABELS = ['Sales-B2B', 'Sales-B2D', 'Sales-OEM', 'Sales-International', 'Sales-B2C'];
+
     public function __construct(private CrmApiService $api) {}
 
     /**
@@ -20,7 +22,7 @@ class SalesPerformanceService
             $this->filterByTerritory($this->filterByDepartment($this->fetchWonQuotes($from, $to), $department), $territory),
             $this->ttlFor($to)
         );
-        $wonByOpp   = $this->maxWonByOpp($wonQuotes);
+        $wonByOpp   = $this->calcOppValue($wonQuotes);
         $wonOppIds  = $wonByOpp->keys()->all();
         $totalValue = $wonByOpp->sum('resolved_value');
         $wonCount   = $wonByOpp->count();
@@ -54,12 +56,12 @@ class SalesPerformanceService
             $this->ttlFor($to)
         );
 
-        return $this->maxWonByOpp($wonQuotes)
+        return $wonQuotes
             ->groupBy(fn ($q) => $this->periodKey($q['closedon'], $groupBy))
-            ->map(fn ($items, $period) => [
+            ->map(fn ($periodQuotes, $period) => [
                 'period' => $period,
-                'value'  => $items->sum('resolved_value'),
-                'deals'  => $items->count(),
+                'value'  => (float) $this->calcOppValue($periodQuotes)->sum('resolved_value'),
+                'deals'  => $this->calcOppValue($periodQuotes)->count(),
             ])
             ->sortBy('period')
             ->values();
@@ -77,14 +79,16 @@ class SalesPerformanceService
             $this->ttlFor($to)
         );
         $kpiByRep  = $this->kpiByRep($from->year);
-        $wonOppIds = $wonQuotes->pluck('_opportunityid_value')->filter()->unique()->all();
+
+        // Group by owner FIRST — mỗi người tính calcOppValue trên quotes của chính họ
+        $wonByOwner  = $wonQuotes->groupBy('_ownerid_value');
+        $wonOppIds   = $wonQuotes->pluck('_opportunityid_value')->filter()->unique()->all();
 
         $lostOpps = $this->filterByTerritory(
             $this->filterByDepartment($this->fetchLostOpportunities($from, $to), $department),
             $territory
         )->filter(fn ($o) => !in_array($o['opportunityid'], $wonOppIds));
 
-        $wonByOwner  = $wonQuotes->groupBy('_ownerid_value');
         $lostByOwner = $lostOpps->groupBy('_ownerid_value');
         $allOwnerIds = $wonByOwner->keys()->merge($lostByOwner->keys())->unique();
 
@@ -92,13 +96,14 @@ class SalesPerformanceService
             $ownerWon  = $wonByOwner->get($ownerId, collect());
             $ownerLost = $lostByOwner->get($ownerId, collect());
 
-            $wonByOpp   = $this->maxWonByOpp($ownerWon);
-            $totalValue = $wonByOpp->sum('resolved_value');
-            $wonCount   = $wonByOpp->count();
-            $lostCount  = $ownerLost->count();
-            $total      = $wonCount + $lostCount;
+            // calcOppValue trên quotes của chính người này → không bị mất opp vì representative sai owner
+            $ownerOppRows = $this->calcOppValue($ownerWon);
+            $totalValue   = $ownerOppRows->sum('resolved_value');
+            $wonCount     = $ownerOppRows->count();
+            $lostCount    = $ownerLost->count();
+            $total        = $wonCount + $lostCount;
 
-            $avgDays = $wonByOpp->avg(fn ($q) =>
+            $avgDays = $ownerOppRows->avg(fn ($q) =>
                 max(0, Carbon::parse($q['createdon'])->diffInDays(Carbon::parse($q['closedon'])))
             );
 
@@ -152,13 +157,15 @@ class SalesPerformanceService
         $from = Carbon::create($year, 1, 1)->startOfDay();
         $to   = Carbon::create($year, 12, 31)->endOfDay();
 
-        $actualByOwner = $this->resolveQuoteValues($this->fetchWonQuotes($from, $to), $this->ttlFor($to))
+        $allWonQuotes = $this->resolveQuoteValues($this->fetchWonQuotes($from, $to), $this->ttlFor($to));
+
+        $actualByOwner = $allWonQuotes
             ->filter(fn ($q) => isset($scopedIds[$q['_ownerid_value'] ?? '']))
             ->groupBy('_ownerid_value')
-            ->map(fn ($quotes) =>
-                $quotes
+            ->map(fn ($ownerQuotes) =>
+                $ownerQuotes
                     ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
-                    ->map(fn ($g) => (float) $g->sum('resolved_value'))
+                    ->map(fn ($qQuotes) => (float) $this->calcOppValue($qQuotes)->sum('resolved_value'))
             );
 
         $now            = now();
@@ -221,14 +228,16 @@ class SalesPerformanceService
         );
         $users     = $this->fetchUsers();
         $kpiByTeam = $this->kpiByTeam($users, $from->year);
-        $wonOppIds = $wonQuotes->pluck('_opportunityid_value')->filter()->unique()->all();
+
+        // Group by team FIRST — mỗi team tính calcOppValue trên quotes của chính team
+        $wonByTeam  = $wonQuotes->groupBy('_owningbusinessunit_value');
+        $wonOppIds  = $wonQuotes->pluck('_opportunityid_value')->filter()->unique()->all();
 
         $lostOpps = $this->filterByTerritory(
             $this->filterByDepartment($this->fetchLostOpportunities($from, $to), $department),
             $territory
         )->filter(fn ($o) => !in_array($o['opportunityid'], $wonOppIds));
 
-        $wonByTeam  = $wonQuotes->groupBy('_owningbusinessunit_value');
         $lostByTeam = $lostOpps->groupBy('_owningbusinessunit_value');
         $allTeamIds = $wonByTeam->keys()->merge($lostByTeam->keys())->unique()->filter();
 
@@ -236,13 +245,18 @@ class SalesPerformanceService
             $teamWon  = $wonByTeam->get($teamId, collect());
             $teamLost = $lostByTeam->get($teamId, collect());
 
-            $wonByOpp   = $this->maxWonByOpp($teamWon);
-            $totalValue = $wonByOpp->sum('resolved_value');
-            $wonCount   = $wonByOpp->count();
+            // Tính per-member rồi aggregate — tránh de-duplicate opp nhầm
+            // (nếu calcOppValue trên toàn team, opp của Liem có thể bị assign representative là người khác)
+            $memberOppRows = $teamWon
+                ->groupBy('_ownerid_value')
+                ->flatMap(fn ($memberQuotes) => $this->calcOppValue($memberQuotes)->all());
+
+            $totalValue = $memberOppRows->sum('resolved_value');
+            $wonCount   = $memberOppRows->count();
             $lostCount  = $teamLost->count();
             $total      = $wonCount + $lostCount;
 
-            $avgDays = $wonByOpp->avg(fn ($q) =>
+            $avgDays = $memberOppRows->avg(fn ($q) =>
                 max(0, Carbon::parse($q['createdon'])->diffInDays(Carbon::parse($q['closedon'])))
             );
 
@@ -270,7 +284,7 @@ class SalesPerformanceService
                 'win_rate'          => $total > 0 ? round($wonCount / $total * 100, 1) : 0,
                 'avg_deal_size'     => $wonCount > 0 ? round($totalValue / $wonCount) : 0,
                 'avg_days_to_close' => $wonCount > 0 ? (int) round($avgDays) : null,
-                'members'           => $wonByOpp->pluck('_ownerid_value')->unique()->count(),
+                'members'           => $teamWon->pluck('_ownerid_value')->unique()->count(),
                 'kpi'               => $kpiByTeam->get($teamId) ?: null,
             ];
         })
@@ -309,7 +323,7 @@ class SalesPerformanceService
             $this->ttlFor($to)
         );
 
-        return $quotes
+        return $this->calcOppValue($quotes)
             ->filter(fn ($q) => !empty($q['_customerid_value']))
             ->groupBy('_customerid_value')
             ->map(fn ($group, $accountId) => [
@@ -337,9 +351,10 @@ class SalesPerformanceService
             300
         );
 
-        $byDay  = $quotes->groupBy(fn ($q) => Carbon::parse($q['closedon'])->format('Y-m-d'));
-        $labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
-        $result = [];
+        $oppRows = $this->calcOppValue($quotes);
+        $byDay   = $oppRows->groupBy(fn ($q) => Carbon::parse($q['closedon'])->format('Y-m-d'));
+        $labels  = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        $result  = [];
 
         for ($i = 0; $i < 7; $i++) {
             $date  = $monday->copy()->addDays($i);
@@ -349,7 +364,7 @@ class SalesPerformanceService
             $result[] = [
                 'day'   => $labels[$i],
                 'date'  => $key,
-                'count' => $items->pluck('_opportunityid_value')->filter()->unique()->count(),
+                'count' => $items->count(),
                 'value' => (int) round($items->sum('resolved_value')),
             ];
         }
@@ -361,7 +376,7 @@ class SalesPerformanceService
     private function fetchWonQuotes(Carbon $from, Carbon $to): Collection
     {
         $data = $this->api->get('quotes', [
-            '$select'  => 'quoteid,closedon,createdon,_ownerid_value,_owningbusinessunit_value,_opportunityid_value,_customerid_value',
+            '$select'  => 'quoteid,closedon,createdon,ab_request_type_code,_ownerid_value,_owningbusinessunit_value,_opportunityid_value,_customerid_value',
             '$filter'  => implode(' and ', [
                 'statecode eq 2',
                 "closedon ge {$from->copy()->startOfDay()->utc()->toIso8601String()}",
@@ -449,18 +464,20 @@ class SalesPerformanceService
 
         if ($targets->isEmpty()) return [];
 
-        // Actual won quotes cho cả năm, group by owner → quarter → sum
+        // Actual won quotes cho cả năm, group by owner → calcOppValue per owner → group by quarter
         $wonQuotes = $this->resolveQuoteValues(
             $this->filterByTerritory($this->fetchWonQuotes($from, $to), $territory),
             $this->ttlFor($to)
         );
 
+        // Group by owner → quarter → calcOppValue per quarter
+        // Tránh cross-quarter: opp có quote Q1 và Q4 không bị assign nhầm quarter
         $actualByOwner = $wonQuotes
             ->groupBy('_ownerid_value')
-            ->map(fn ($quotes) =>
-                $quotes
+            ->map(fn ($ownerQuotes) =>
+                $ownerQuotes
                     ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
-                    ->map(fn ($g) => (float) $g->sum('resolved_value'))
+                    ->map(fn ($qQuotes) => (float) $this->calcOppValue($qQuotes)->sum('resolved_value'))
             );
 
         $now            = now();
@@ -656,12 +673,15 @@ class SalesPerformanceService
         $from = Carbon::create($year, 1, 1)->startOfDay();
         $to   = Carbon::create($year, 12, 31)->endOfDay();
 
-        $actualByOwner = $this->resolveQuoteValues($this->fetchWonQuotes($from, $to), $this->ttlFor($to))
+        $allWonQuotes2 = $this->resolveQuoteValues($this->fetchWonQuotes($from, $to), $this->ttlFor($to));
+
+        $actualByOwner = $allWonQuotes2
             ->filter(fn ($q) => isset($scopedIds[$q['_ownerid_value'] ?? '']))
             ->groupBy('_ownerid_value')
-            ->map(fn ($quotes) =>
-                $quotes->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
-                       ->map(fn ($g) => (float) $g->sum('resolved_value'))
+            ->map(fn ($ownerQuotes) =>
+                $ownerQuotes
+                    ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
+                    ->map(fn ($qQuotes) => (float) $this->calcOppValue($qQuotes)->sum('resolved_value'))
             );
 
         $now            = now();
@@ -742,7 +762,7 @@ class SalesPerformanceService
 
         $actualByRep = $wonQuotes
             ->groupBy('_ownerid_value')
-            ->map(fn ($g) => (float) $g->sum('resolved_value'));
+            ->map(fn ($ownerQuotes) => (float) $this->calcOppValue($ownerQuotes)->sum('resolved_value'));
 
         $qKey = "q{$quarter}";
 
@@ -843,11 +863,36 @@ class SalesPerformanceService
     }
 
     // Group won quotes by opportunity, giữ quote có giá trị cao nhất mỗi opp
-    private function maxWonByOpp(Collection $wonQuotes): Collection
+    /**
+     * Tính giá trị mỗi opp = max(genset won) + sum(d&i won).
+     * Trả về Collection keyed by opp_id, mỗi phần tử là representative quote + resolved_value mới.
+     */
+    private function calcOppValue(Collection $wonQuotes): Collection
     {
+        $labels   = $this->fetchPicklistLabels('quote', 'ab_request_type_code');
+        $gensetSet = array_flip(self::GENSET_LABELS);
+
+        $codeToGroup = [];
+        foreach ($labels as $code => $label) {
+            $codeToGroup[$code] = isset($gensetSet[$label]) ? 'genset' : 'di';
+        }
+
         return $wonQuotes
             ->groupBy(fn ($q) => $q['_opportunityid_value'] ?: $q['quoteid'])
-            ->map(fn ($quotes) => $quotes->sortByDesc('resolved_value')->first());
+            ->map(function ($quotes) use ($codeToGroup) {
+                $genset = $quotes->filter(
+                    fn ($q) => ($codeToGroup[(string) ($q['ab_request_type_code'] ?? '')] ?? 'genset') === 'genset'
+                );
+                $di = $quotes->filter(
+                    fn ($q) => ($codeToGroup[(string) ($q['ab_request_type_code'] ?? '')] ?? 'genset') === 'di'
+                );
+
+                $gensetValue = (float) ($genset->max('resolved_value') ?? 0);
+                $diValue     = (float) $di->sum('resolved_value');
+
+                $rep = $quotes->sortByDesc('closedon')->first();
+                return array_merge($rep, ['resolved_value' => $gensetValue + $diValue]);
+            });
     }
 
     private function periodKey(?string $date, string $groupBy): string
@@ -1169,6 +1214,96 @@ class SalesPerformanceService
             ->sortByDesc('new_opps')
             ->values()
             ->toArray();
+    }
+
+    public function quoteRequestTypeCrosstab(int $year, ?string $territory = null, ?string $department = null): array
+    {
+        $from = Carbon::create($year, 1, 1)->startOfDay()->utc()->toIso8601String();
+        $to   = Carbon::create($year, 12, 31)->endOfDay()->utc()->toIso8601String();
+
+        $data = $this->api->get('quotes', [
+            '$select' => 'quoteid,ab_request_type_code,_ownerid_value,statecode',
+            '$filter' => "createdon ge {$from} and createdon lt {$to}",
+            '$top'    => '5000',
+        ], ttl: 900);
+
+        $quotes = $this->filterByTerritory(
+            $this->filterByDepartment(collect($data['value'] ?? []), $department),
+            $territory
+        );
+
+        $users = $this->fetchUsers();
+
+        $matrix   = [];
+        $deptSet  = [];
+        $codeSet  = [];
+
+        foreach ($quotes as $q) {
+            $raw     = $q['ab_request_type_code'] ?? null;
+            $code    = ($raw !== null && $raw !== '') ? (string) $raw : '(Chua nhap)';
+            $ownerId = $q['_ownerid_value'] ?? null;
+            $dept    = ($ownerId && $users->has($ownerId))
+                ? ($users->get($ownerId)['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '(Chua phan bo)')
+                : '(Chua phan bo)';
+
+            $matrix[$code][$dept] = ($matrix[$code][$dept] ?? 0) + 1;
+            $deptSet[$dept]       = true;
+            $codeSet[$code]       = true;
+        }
+
+        $depts = array_keys($deptSet);
+        sort($depts);
+
+        $codeList = array_keys($codeSet);
+        usort($codeList, fn ($a, $b) =>
+            $a === '(Chua nhap)' ? 1 : ($b === '(Chua nhap)' ? -1 : strcmp($a, $b))
+        );
+
+        $colTotals  = array_fill_keys($depts, 0);
+        $grandTotal = 0;
+        $rows       = [];
+
+        foreach ($codeList as $code) {
+            $byDept   = [];
+            $rowTotal = 0;
+            foreach ($depts as $dept) {
+                $count          = $matrix[$code][$dept] ?? 0;
+                $byDept[$dept]  = $count;
+                $colTotals[$dept] += $count;
+                $rowTotal       += $count;
+                $grandTotal     += $count;
+            }
+            $rows[] = ['code' => $code, 'by_dept' => $byDept, 'total' => $rowTotal];
+        }
+
+        $labels = $this->fetchPicklistLabels('quote', 'ab_request_type_code');
+
+        return [
+            'labels'        => $labels,
+            'codes'         => $codeList,
+            'departments'   => $depts,
+            'rows'          => $rows,
+            'column_totals' => $colTotals,
+            'grand_total'   => $grandTotal,
+        ];
+    }
+
+    private function fetchPicklistLabels(string $entity, string $attribute): array
+    {
+        try {
+            $path   = "EntityDefinitions(LogicalName='{$entity}')/Attributes(LogicalName='{$attribute}')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata";
+            $data   = $this->api->getMetadata($path, ['$expand' => 'OptionSet']);
+            $labels = [];
+            foreach ($data['OptionSet']['Options'] ?? [] as $opt) {
+                $value          = (string) $opt['Value'];
+                $labels[$value] = $opt['Label']['UserLocalizedLabel']['Label']
+                    ?? $opt['Label']['LocalizedLabels'][0]['Label']
+                    ?? $value;
+            }
+            return $labels;
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     // Lấy danh sách user, keyed theo systemuserid — dùng để map owner_id → territory/department/cost_center
