@@ -87,6 +87,38 @@ class CrmApiService
         Cache::forget('crm:' . md5($entity . serialize($params)));
     }
 
+    // Fetch D365 metadata (option sets, entity definitions) — cache dài vì ít thay đổi
+    public function getMetadata(string $path, array $params = [], int $ttl = 86400): array
+    {
+        $cacheKey = 'crm_meta:' . md5($path . serialize($params));
+        return Cache::remember($cacheKey, $ttl, function () use ($path, $params) {
+            $client = Http::withToken($this->tokenService->getToken())
+                ->baseUrl(config('crm.base_url') . "/api/data/{$this->apiVersion}/")
+                ->withHeaders([
+                    'OData-MaxVersion' => '4.0',
+                    'OData-Version'    => '4.0',
+                    'Accept'           => 'application/json',
+                ]);
+
+            $response = $client->get($path, $params);
+
+            if ($response->unauthorized()) {
+                $this->tokenService->forceRefresh();
+                $response = Http::withToken($this->tokenService->getToken())
+                    ->baseUrl(config('crm.base_url') . "/api/data/{$this->apiVersion}/")
+                    ->withHeaders([
+                        'OData-MaxVersion' => '4.0',
+                        'OData-Version'    => '4.0',
+                        'Accept'           => 'application/json',
+                    ])
+                    ->get($path, $params);
+            }
+
+            $response->throw();
+            return $response->json();
+        });
+    }
+
     public function delete(string $entity, string $id): void
     {
         $response = $this->clientWrite()->delete("{$entity}({$id})");

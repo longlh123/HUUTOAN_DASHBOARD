@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Dashboard;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Traits\ApiResponse;
 use App\Services\Crm\SalesPerformanceService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -26,5 +27,12 @@ class OpportunitiesController extends Controller
         } catch (\Throwable $e) {
             return $this->error('QUALITY_ERROR', $e->getMessage(), 500);
         }
+    }
+
+    public function activity(Request $request): JsonResponse
+    {
+        $from = Carbon::parse($request->query('from', now()->startOfYear()->toDateString()));
+        $to   = Carbon::parse($request->query('to',   now()->toDateString()));
+        return $this->success($this->sales->oppActivity($from, $to, $request->query('territory'), $request->query('department')));
     }
 }

@@ -46,3 +46,22 @@ export function prevYearRange(range: DateRange): DateRange {
 export function getPresetRange(_: 'year'): DateRange {
   return getYearRange(new Date().getFullYear())
 }
+
+export function getThisWeekRange(): DateRange {
+  const now = new Date()
+  const daysToMonday = (now.getDay() + 6) % 7
+  const monday = new Date(now)
+  monday.setDate(now.getDate() - daysToMonday)
+  return { from: toDateStr(monday), to: today() }
+}
+
+export function getThisMonthRange(): DateRange {
+  const now = new Date()
+  return getMonthRange(now.getFullYear(), now.getMonth() + 1)
+}
+
+export function getThisQuarterRange(): DateRange {
+  const now = new Date()
+  const q = Math.ceil((now.getMonth() + 1) / 3)
+  return getQuarterRange(now.getFullYear(), q)
+}

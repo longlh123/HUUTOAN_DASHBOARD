@@ -113,6 +113,16 @@ class SalesController extends Controller
         ));
     }
 
+    public function requestTypeCrosstab(Request $request): JsonResponse
+    {
+        $year = (int) $request->query('year', now()->year);
+        return $this->success($this->sales->quoteRequestTypeCrosstab(
+            $year,
+            $request->query('territory'),
+            $request->query('department')
+        ));
+    }
+
     private function parseDateRange(Request $request): array
     {
         $from = Carbon::parse($request->query('from', now()->startOfYear()->toDateString()));

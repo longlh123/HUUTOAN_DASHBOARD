@@ -68,8 +68,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/sales/by-period',        [SalesController::class,        'byPeriod']);
         Route::get('/sales/by-rep',           [SalesController::class,        'byRep']);
         Route::get('/sales/by-team',          [SalesController::class,        'byTeam']);
+        Route::get('/sales/request-type',     [SalesController::class,         'requestTypeCrosstab']);
         Route::get('/opportunities/pipeline', [OpportunitiesController::class, 'pipeline']);
         Route::get('/opportunities/quality',  [OpportunitiesController::class, 'quality']);
+        Route::get('/opportunities/activity', [OpportunitiesController::class, 'activity']);
 
         Route::get('/sales/users',            [SalesController::class,  'users']);
         Route::get('/sales/kpi-quarterly',    [SalesController::class,  'kpiQuarterly']);
