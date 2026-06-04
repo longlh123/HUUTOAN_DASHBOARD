@@ -560,7 +560,7 @@ class SalesPerformanceService
             ->values();
 
         $byStage = $opps
-            ->groupBy(fn ($o) => $o['stepname'] ?? 'Chua phan loai')
+            ->groupBy(fn ($o) => $o['ab_process_stage_code@OData.Community.Display.V1.FormattedValue'] ?? 'Chua phan loai')
             ->map(fn ($items, $stage) => [
                 'stage' => $stage,
                 'count' => $items->count(),
@@ -599,7 +599,7 @@ class SalesPerformanceService
                 'owner'     => $o['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
                 'days_open' => (int) Carbon::parse($o['createdon'])->diffInDays($now),
                 'value'     => $maxQuoteValue($o),
-                'stage'     => $o['stepname'] ?? '',
+                'stage'     => $o['ab_process_stage_code@OData.Community.Display.V1.FormattedValue'] ?? '',
             ])
             ->sortByDesc('days_open')
             ->values();
@@ -626,7 +626,7 @@ class SalesPerformanceService
                 'crm_link'         => config('crm.base_url') . '/main.aspx?etn=opportunity&id=' . ($o['opportunityid'] ?? '') . '&pagetype=entityrecord',
                 'name'             => $o['name'] ?? '',
                 'owner'            => $o['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
-                'stage'            => $o['stepname'] ?? '',
+                'stage'            => $o['ab_process_stage_code@OData.Community.Display.V1.FormattedValue'] ?? '',
                 'potential'        => $o['ab_project_potential_code@OData.Community.Display.V1.FormattedValue'] ?? '',
                 'estimated_close'  => !empty($o['estimatedclosedate'])
                     ? Carbon::parse($o['estimatedclosedate'])->toDateString()
@@ -792,7 +792,7 @@ class SalesPerformanceService
     private function fetchOpenOpportunities(): Collection
     {
         $data = $this->api->get('opportunities', [
-            '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,stepname,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,ab_project_potential_code',
+            '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,ab_process_stage_code,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,ab_project_potential_code',
             '$filter'  => 'statecode eq 0',
             '$orderby' => 'createdon desc',
             '$top'     => '500',
@@ -1108,7 +1108,7 @@ class SalesPerformanceService
 
                     $hasCloseDate  = !empty($opp['estimatedclosedate']);
                     $hasAmount     = (float) ($opp['estimatedvalue'] ?? 0) > 0;
-                    $hasStage      = !empty($opp['stepname']);
+                    $hasStage      = !empty($opp['ab_process_stage_code']);
                     $hasCustomer   = !empty($opp['_customerid_value']);
                     $hasPotential  = !empty($opp['ab_project_potential_code']);
                     if ($hasCloseDate && $hasAmount && $hasStage && $hasCustomer && $hasPotential) {
@@ -1147,7 +1147,7 @@ class SalesPerformanceService
     private function fetchOpenOppsForQuality(): Collection
     {
         $data = $this->api->get('opportunities', [
-            '$select'  => 'opportunityid,estimatedvalue,stepname,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,_customerid_value',
+            '$select'  => 'opportunityid,estimatedvalue,ab_process_stage_code,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,_customerid_value,ab_project_potential_code',
             '$filter'  => 'statecode eq 0',
             '$orderby' => 'createdon desc',
             '$top'     => '500',

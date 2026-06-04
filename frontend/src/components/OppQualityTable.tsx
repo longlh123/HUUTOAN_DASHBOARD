@@ -99,7 +99,7 @@ export function OppQualityTable({ data, loading }: Props) {
               </th>
               <th style={{ textAlign: 'right' }}>
                 % Du thong tin
-                <ColInfo text={"Opp được coi là đủ thông tin khi có đủ 5 trường:\n• Ngày dự kiến chốt (EstimatedCloseDate)\n• Giá trị ước tính > 0\n• Giai đoạn (stepname)\n• Khách hàng\n• Mức độ tiềm năng (Low / Medium / High)"} />
+                <ColInfo text={"Opp được coi là đủ thông tin khi có đủ 5 trường:\n• Ngày dự kiến chốt (EstimatedCloseDate)\n• Giá trị ước tính > 0\n• Giai đoạn (Process Stage)\n• Khách hàng\n• Mức độ tiềm năng (Low / Medium / High)"} />
               </th>
               <th style={{ textAlign: 'right' }}>
                 Co Quote, Bo nguoi 30d
