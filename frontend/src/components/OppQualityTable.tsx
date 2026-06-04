@@ -1,4 +1,42 @@
+import { useEffect, useRef, useState } from 'react'
 import type { OppQualityRow } from '../api/sales'
+
+function ColInfo({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  const [pos,  setPos]  = useState({ top: 0, left: 0 })
+  const ref = useRef<HTMLSpanElement>(null)
+
+  function toggle(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect()
+      setPos({ top: r.bottom + 8, left: r.left + r.width / 2 })
+    }
+    setOpen(v => !v)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    function close() { setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return (
+    <span className={`col-info${open ? ' col-info--open' : ''}`} ref={ref} onClick={toggle}>
+      <span className="col-info__icon">ⓘ</span>
+      {open && (
+        <div
+          className="col-info__tip"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, transform: 'translateX(-50%)' }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          {text}
+        </div>
+      )}
+    </span>
+  )
+}
 
 type Props = {
   data:    OppQualityRow[]
@@ -51,11 +89,26 @@ export function OppQualityTable({ data, loading }: Props) {
               <th>Salesperson</th>
               <th style={{ textAlign: 'right' }}>Opp mo</th>
               <th style={{ textAlign: 'right' }}>Co Quote</th>
-              <th style={{ textAlign: 'right' }}>% Dinh kem Quote</th>
-              <th style={{ textAlign: 'right' }}>Lag Opp→Quote</th>
-              <th style={{ textAlign: 'right' }}>% Du thong tin</th>
-              <th style={{ textAlign: 'right' }}>Khong HĐ 30d</th>
-              <th style={{ textAlign: 'right' }}>Nhap muon</th>
+              <th style={{ textAlign: 'right' }}>
+                % Dinh kem Quote
+                <ColInfo text="Tỉ lệ opp có ít nhất 1 báo giá liên kết. Mục tiêu ≥ 80%." />
+              </th>
+              <th style={{ textAlign: 'right' }}>
+                Lag Opp→Quote
+                <ColInfo text="Số ngày TB từ khi tạo Opp đến Quote đầu tiên được tạo. Tốt: ≤ 3 ngày · Trung bình: 4–7 ngày · Chậm: > 7 ngày." />
+              </th>
+              <th style={{ textAlign: 'right' }}>
+                % Du thong tin
+                <ColInfo text={"Opp được coi là đủ thông tin khi có đủ 5 trường:\n• Ngày dự kiến chốt (EstimatedCloseDate)\n• Giá trị ước tính > 0\n• Giai đoạn (stepname)\n• Khách hàng\n• Mức độ tiềm năng (Low / Medium / High)"} />
+              </th>
+              <th style={{ textAlign: 'right' }}>
+                Co Quote, Bo nguoi 30d
+                <ColInfo text={"Số opp đã có quote, chưa won, nhưng không có dấu hiệu hoạt động trong 30 ngày:\n• Không có activity (cuộc gọi, email, task...)\n• Không có quote nào được cập nhật\nĐây là các opp cần sales chủ động follow up."} />
+              </th>
+              <th style={{ textAlign: 'right' }}>
+                Nhap muon
+                <ColInfo text="Số opp có EstimatedCloseDate chỉ cách ngày tạo ≤ 7 ngày — nghi ngờ nhập hồi tố (backdated)." />
+              </th>
             </tr>
           </thead>
           <tbody>

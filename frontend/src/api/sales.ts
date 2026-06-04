@@ -60,7 +60,7 @@ export type TopWinOpp = {
   name: string
   owner: string
   stage: string
-  close_probability: number
+  potential: string
   estimated_close: string | null
   value: number
 }
@@ -72,14 +72,22 @@ export type GapToTargetItem = {
   gap:     number
 }
 
+export type PotentialData = {
+  label: string
+  count: number
+  value: number
+  pct:   number
+}
+
 export type PipelineData = {
   pipeline_value: number
   opportunity_count: number
   weighted_pipeline: number
+  by_potential: PotentialData[]
   by_stage: StageData[]
-  forecast_30d: number
-  forecast_60d: number
-  forecast_90d: number
+  forecast_next_quarter: number
+  forecast_next_2q: number
+  forecast_next_3q: number
   aging: AgingOpp[]
   top_win: TopWinOpp[]
 }
@@ -154,6 +162,15 @@ export type OppQualityRow = {
   complete_rate:     number
   no_activity_30d:   number
   backdated:         number
+}
+
+export type OppActivityRow = {
+  owner_id:           string
+  name:               string
+  new_opps:           number
+  new_pipeline_value: number
+  new_customers:      number
+  last_opp_created:   string | null
 }
 
 export type TopAccountItem = {
@@ -264,6 +281,9 @@ export const fetchGapToTarget = (year: number, territory: string, department?: s
 
 export const fetchOppQuality = (territory: string, department?: string) =>
   apiFetch<OppQualityRow[]>(`${OPP_BASE}/quality?${new URLSearchParams({ territory, ...(department ? { department } : {}) })}`)
+
+export const fetchOppActivity = (range: DateRange, territory: string, department?: string) =>
+  apiFetch<OppActivityRow[]>(`${OPP_BASE}/activity?${qs(range, { territory, ...(department ? { department } : {}) })}`)
 
 export const fetchKpiQuarterly = (year: number, territory: string, department?: string) =>
   apiFetch<KpiQuarterly>(`${BASE}/kpi-quarterly?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)

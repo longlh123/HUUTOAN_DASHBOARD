@@ -114,6 +114,7 @@ function UserCombobox({
 export function KpiSettingsPage() {
   const [tab,        setTab]        = useState<'targets' | 'performance'>('targets')
   const [year,       setYear]       = useState(CURRENT_YEAR)
+  const [deptFilter, setDeptFilter] = useState<string>('ALL')
   const [targets,    setTargets]    = useState<KpiTarget[]>([])
   const [users,      setUsers]      = useState<CrmUser[]>([])
   const [edits,      setEdits]      = useState<Record<string, EditState>>({})
@@ -149,8 +150,32 @@ export function KpiSettingsPage() {
       .finally(() => setPerfLoading(false))
   }, [tab, year])
 
+  const departments = ['ALL', ...Array.from(new Set(users.map(u => u.department).filter(Boolean))).sort()]
+
+  function changeDept(dept: string) {
+    setDeptFilter(dept)
+    setNewRow(null)
+  }
+
   const usedIds   = new Set(targets.map(t => t.crm_user_id))
-  const available = users.filter(u => !usedIds.has(u.id))
+  const available = users.filter(u =>
+    !usedIds.has(u.id) &&
+    (deptFilter === 'ALL' || u.department === deptFilter)
+  )
+
+  const filteredTargets = deptFilter === 'ALL'
+    ? targets
+    : targets.filter(t => {
+        const user = users.find(u => u.id === t.crm_user_id)
+        return user?.department === deptFilter
+      })
+
+  const filteredPerf = deptFilter === 'ALL'
+    ? perf
+    : perf.filter(r => {
+        const user = users.find(u => u.id === r.user_id)
+        return user?.department === deptFilter
+      })
 
   function startAdd() {
     setNewRow({ crm_user_id: '', user_name: '', q1: '', q2: '', q3: '', q4: '' })
@@ -222,7 +247,7 @@ export function KpiSettingsPage() {
     ? (['q1', 'q2', 'q3', 'q4'] as const).reduce((acc, q) => acc + (fromStr(newRow[q]) ?? 0), 0)
     : 0
 
-  const totalSum = targets.reduce((acc, t) => {
+  const totalSum = filteredTargets.reduce((acc, t) => {
     const e = edits[t.id] ?? targetToEdit(t)
     return acc + (['q1', 'q2', 'q3', 'q4'] as const).reduce((s, q) => s + (fromStr(e[q]) ?? 0), 0)
   }, 0) + newRowSum
@@ -244,6 +269,17 @@ export function KpiSettingsPage() {
             >Hiệu suất</button>
           </div>
           <div className="kpi-settings__header-actions">
+            {departments.length > 1 && (
+              <select
+                className="kpi-settings__year-select"
+                value={deptFilter}
+                onChange={e => changeDept(e.target.value)}
+              >
+                {departments.map(d => (
+                  <option key={d} value={d}>{d === 'ALL' ? 'Tất cả phòng ban' : d}</option>
+                ))}
+              </select>
+            )}
             <select
               className="kpi-settings__year-select"
               value={year}
@@ -270,7 +306,10 @@ export function KpiSettingsPage() {
 
       {tab === 'targets' && <div className="card">
         <div className="kpi-settings__total-bar">
-          <span className="kpi-settings__total-label">Tổng KPI cả năm ({targets.length + (newRow ? 1 : 0)} thành viên)</span>
+          <span className="kpi-settings__total-label">
+            Tổng KPI cả năm ({filteredTargets.length + (newRow ? 1 : 0)} thành viên
+            {deptFilter !== 'ALL' ? ` · ${deptFilter}` : ''})
+          </span>
           <span className="kpi-settings__total-value">{totalSum > 0 ? fmtVNDFull(totalSum) : '—'}</span>
         </div>
         <table className="leaderboard kpi-settings__table">
@@ -286,7 +325,7 @@ export function KpiSettingsPage() {
             </tr>
           </thead>
           <tbody>
-            {targets.map(t => {
+            {filteredTargets.map(t => {
               const e   = edits[t.id] ?? targetToEdit(t)
               const sum = (['q1', 'q2', 'q3', 'q4'] as const)
                 .reduce((acc, q) => acc + (fromStr(e[q]) ?? 0), 0)
@@ -367,10 +406,12 @@ export function KpiSettingsPage() {
               </tr>
             )}
 
-            {targets.length === 0 && !newRow && (
+            {filteredTargets.length === 0 && !newRow && (
               <tr>
                 <td colSpan={7} className="table-placeholder">
-                  Chưa có KPI nào. Nhấn "+ Thêm" để bắt đầu.
+                  {deptFilter !== 'ALL'
+                    ? `Chưa có KPI nào cho phòng ban "${deptFilter}".`
+                    : 'Chưa có KPI nào. Nhấn "+ Thêm" để bắt đầu.'}
                 </td>
               </tr>
             )}
@@ -393,8 +434,12 @@ export function KpiSettingsPage() {
           </div>
           {perfLoading
             ? <p className="table-placeholder">Đang tải...</p>
-            : perf.length === 0
-              ? <p className="table-placeholder">Chưa có dữ liệu KPI cho năm {year}.</p>
+            : filteredPerf.length === 0
+              ? <p className="table-placeholder">
+                  {deptFilter !== 'ALL'
+                    ? `Chưa có dữ liệu KPI cho phòng ban "${deptFilter}" năm ${year}.`
+                    : `Chưa có dữ liệu KPI cho năm ${year}.`}
+                </p>
               : <table className="leaderboard kpi-settings__table kpi-perf__table">
                   <thead>
                     <tr>
@@ -405,7 +450,7 @@ export function KpiSettingsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {perf.map(row => {
+                    {filteredPerf.map(row => {
                       const tgt = perfQuarter === 'all'
                         ? (['q1', 'q2', 'q3', 'q4'] as const).reduce((s, q) => s + row.quarters[q].effective, 0)
                         : row.quarters[perfQuarter].effective
@@ -432,10 +477,10 @@ export function KpiSettingsPage() {
                     <tr className="kpi-perf__total-row">
                       <td><strong>Tổng</strong></td>
                       {(() => {
-                        const totTgt = perf.reduce((s, r) => s + (perfQuarter === 'all'
+                        const totTgt = filteredPerf.reduce((s, r) => s + (perfQuarter === 'all'
                           ? (['q1', 'q2', 'q3', 'q4'] as const).reduce((qs, q) => qs + r.quarters[q].effective, 0)
                           : r.quarters[perfQuarter].effective), 0)
-                        const totAct = perf.reduce((s, r) => s + (perfQuarter === 'all'
+                        const totAct = filteredPerf.reduce((s, r) => s + (perfQuarter === 'all'
                           ? (['q1', 'q2', 'q3', 'q4'] as const).reduce((qs, q) => qs + r.quarters[q].actual, 0)
                           : r.quarters[perfQuarter].actual), 0)
                         const pct = totTgt > 0 ? totAct / totTgt : 0

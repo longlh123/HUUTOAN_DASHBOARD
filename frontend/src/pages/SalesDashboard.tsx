@@ -13,6 +13,7 @@ import { TerritoryFilter } from '../components/TerritoryFilter'
 import { WeeklyWonChart } from '../components/WeeklyWonChart'
 import { TeamTargetChart } from '../components/TeamTargetChart'
 import { TopAccountsTable } from '../components/TopAccountsTable'
+import { OppActivityTable } from '../components/OppActivityTable'
 import type { Territory } from '../components/TerritoryFilter'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -180,6 +181,7 @@ export function SalesDashboard() {
           </div>
           <SalesTeamLeaderboard territory={territory} department={department} range={range} />
           <SalesLeaderboard territory={territory} department={department} range={range} />
+          <OppActivityTable territory={territory} department={department} range={range} />
           <TopAccountsTable territory={territory} department={department} range={range} />
         </div>
       )}

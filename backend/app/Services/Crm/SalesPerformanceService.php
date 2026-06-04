@@ -516,9 +516,31 @@ class SalesPerformanceService
 
         $pipelineValue = $opps->sum($maxQuoteValue);
         $count         = $opps->count();
-        $weighted      = $opps->sum(fn ($o) =>
-            $maxQuoteValue($o) * ((float) ($o['closeprobability'] ?? 0) / 100)
-        );
+        $potentialProb = fn ($o) => match (
+            $o['ab_project_potential_code@OData.Community.Display.V1.FormattedValue'] ?? ''
+        ) {
+            'High'   => 0.70,
+            'Medium' => 0.40,
+            'Low'    => 0.20,
+            default  => 0.10,
+        };
+        $weighted = $opps->sum(fn ($o) => $maxQuoteValue($o) * $potentialProb($o));
+
+        $byPotential = $opps
+            ->groupBy(fn ($o) => $o['ab_project_potential_code@OData.Community.Display.V1.FormattedValue'] ?? 'Chua phan loai')
+            ->map(fn ($items, $label) => [
+                'label' => $label,
+                'count' => $items->count(),
+                'value' => round($items->sum($maxQuoteValue)),
+                'pct'   => $count > 0 ? round($items->count() / $count * 100, 1) : 0.0,
+            ])
+            ->sortBy(fn ($item) => match ($item['label']) {
+                'High'  => 0,
+                'Medium' => 1,
+                'Low'   => 2,
+                default => 3,
+            })
+            ->values();
 
         $byStage = $opps
             ->groupBy(fn ($o) => $o['stepname'] ?? 'Chua phan loai')
@@ -530,19 +552,24 @@ class SalesPerformanceService
             ->sortByDesc('value')
             ->values();
 
-        $f30 = $opps->filter(fn ($o) =>
+        $nextQStart = $now->copy()->addQuarters(1)->startOfQuarter();
+        $nextQ1End  = $now->copy()->addQuarters(1)->endOfQuarter();
+        $nextQ2End  = $now->copy()->addQuarters(2)->endOfQuarter();
+        $nextQ3End  = $now->copy()->addQuarters(3)->endOfQuarter();
+
+        $fNextQ = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
-            Carbon::parse($o['estimatedclosedate'])->lte($now->copy()->addDays(30))
+            Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ1End)
         )->sum($maxQuoteValue);
 
-        $f60 = $opps->filter(fn ($o) =>
+        $f2Q = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
-            Carbon::parse($o['estimatedclosedate'])->lte($now->copy()->addDays(60))
+            Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ2End)
         )->sum($maxQuoteValue);
 
-        $f90 = $opps->filter(fn ($o) =>
+        $f3Q = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
-            Carbon::parse($o['estimatedclosedate'])->lte($now->copy()->addDays(90))
+            Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ3End)
         )->sum($maxQuoteValue);
 
         $aging = $opps
@@ -566,18 +593,24 @@ class SalesPerformanceService
             default => 1.0,
         };
 
+        $potentialOrder = fn ($o) => match (
+            $o['ab_project_potential_code@OData.Community.Display.V1.FormattedValue'] ?? ''
+        ) {
+            'High'   => 0,
+            'Medium' => 1,
+            'Low'    => 2,
+            default  => 3,
+        };
+
         $topWin = $opps
-            ->sortByDesc(fn ($o) =>
-                $maxQuoteValue($o) * (1 + (float) ($o['closeprobability'] ?? 0) / 100) * $urgencyWeight($o)
-            )
-            ->take(10)
+            ->sortBy(fn ($o) => [$potentialOrder($o), -$maxQuoteValue($o)])
             ->map(fn ($o) => [
                 'opp_number'       => $o['ab_opportunitynumber'] ?? '',
                 'crm_link'         => config('crm.base_url') . '/main.aspx?etn=opportunity&id=' . ($o['opportunityid'] ?? '') . '&pagetype=entityrecord',
                 'name'             => $o['name'] ?? '',
                 'owner'            => $o['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
                 'stage'            => $o['stepname'] ?? '',
-                'close_probability'=> (int) ($o['closeprobability'] ?? 0),
+                'potential'        => $o['ab_project_potential_code@OData.Community.Display.V1.FormattedValue'] ?? '',
                 'estimated_close'  => !empty($o['estimatedclosedate'])
                     ? Carbon::parse($o['estimatedclosedate'])->toDateString()
                     : null,
@@ -589,10 +622,11 @@ class SalesPerformanceService
             'pipeline_value'    => round($pipelineValue),
             'opportunity_count' => $count,
             'weighted_pipeline' => round($weighted),
+            'by_potential'      => $byPotential->toArray(),
             'by_stage'          => $byStage->toArray(),
-            'forecast_30d'      => round($f30),
-            'forecast_60d'      => round($f60),
-            'forecast_90d'      => round($f90),
+            'forecast_next_quarter' => round($fNextQ),
+            'forecast_next_2q'  => round($f2Q),
+            'forecast_next_3q'  => round($f3Q),
             'aging'             => $aging->toArray(),
             'top_win'           => $topWin->toArray(),
         ];
@@ -738,7 +772,7 @@ class SalesPerformanceService
     private function fetchOpenOpportunities(): Collection
     {
         $data = $this->api->get('opportunities', [
-            '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,stepname,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value',
+            '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,stepname,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,ab_project_potential_code',
             '$filter'  => 'statecode eq 0',
             '$orderby' => 'createdon desc',
             '$top'     => '500',
@@ -989,9 +1023,11 @@ class SalesPerformanceService
             $activeOppIds = [];
         }
 
+        $cutoff30 = now()->subDays(30);
+
         $byRep = $opps
             ->groupBy('_ownerid_value')
-            ->map(function (Collection $repOpps, string $ownerId) use ($quotesByOpp, $activeOppIds) {
+            ->map(function (Collection $repOpps, string $ownerId) use ($quotesByOpp, $activeOppIds, $cutoff30) {
                 $name  = $repOpps->first()['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown';
                 $total = $repOpps->count();
 
@@ -1015,18 +1051,23 @@ class SalesPerformanceService
                         if ($firstQuote) {
                             $quoteLags[] = max(0, (int) $oppCreated->diffInDays($firstQuote));
                         }
+
+                        // Opp bị stale: có quote nhưng không có activity và không có quote nào được cập nhật trong 30 ngày
+                        $quoteRecentlyUpdated = $quotes->contains(
+                            fn ($q) => !empty($q['modifiedon']) && Carbon::parse($q['modifiedon'])->gte($cutoff30)
+                        );
+                        if (!isset($activeOppIds[$oppId]) && !$quoteRecentlyUpdated) {
+                            $noActivity++;
+                        }
                     }
 
-                    $hasCloseDate = !empty($opp['estimatedclosedate']);
-                    $hasAmount    = (float) ($opp['estimatedvalue'] ?? 0) > 0;
-                    $hasStage     = !empty($opp['stepname']);
-                    $hasCustomer  = !empty($opp['_customerid_value']);
-                    if ($hasCloseDate && $hasAmount && $hasStage && $hasCustomer) {
+                    $hasCloseDate  = !empty($opp['estimatedclosedate']);
+                    $hasAmount     = (float) ($opp['estimatedvalue'] ?? 0) > 0;
+                    $hasStage      = !empty($opp['stepname']);
+                    $hasCustomer   = !empty($opp['_customerid_value']);
+                    $hasPotential  = !empty($opp['ab_project_potential_code']);
+                    if ($hasCloseDate && $hasAmount && $hasStage && $hasCustomer && $hasPotential) {
                         $completeCount++;
-                    }
-
-                    if (!isset($activeOppIds[$oppId])) {
-                        $noActivity++;
                     }
 
                     if (!empty($opp['estimatedclosedate']) && !empty($opp['createdon'])) {
@@ -1073,7 +1114,7 @@ class SalesPerformanceService
     private function fetchAllQuotesForOpps(): Collection
     {
         $data = $this->api->get('quotes', [
-            '$select'  => 'quoteid,_opportunityid_value,createdon',
+            '$select'  => 'quoteid,_opportunityid_value,createdon,modifiedon',
             '$orderby' => 'createdon desc',
             '$top'     => '5000',
         ], ttl: 300);
@@ -1091,6 +1132,43 @@ class SalesPerformanceService
         ], ttl: 180);
 
         return collect($data['value'] ?? [])->filter(fn ($a) => !empty($a['_regardingobjectid_value']));
+    }
+
+    public function oppActivity(Carbon $from, Carbon $to, ?string $territory = null, ?string $department = null): array
+    {
+        $fromStr = $from->copy()->startOfDay()->utc()->toIso8601String();
+        $toStr   = $to->copy()->endOfDay()->utc()->toIso8601String();
+
+        $data = $this->api->get('opportunities', [
+            '$select'  => 'opportunityid,createdon,estimatedvalue,_ownerid_value,_customerid_value',
+            '$filter'  => "createdon ge {$fromStr} and createdon lt {$toStr}",
+            '$orderby' => 'createdon desc',
+            '$top'     => '2000',
+        ], ttl: 600);
+
+        $opps = $this->filterByTerritory(
+            $this->filterByDepartment(collect($data['value'] ?? []), $department),
+            $territory
+        );
+
+        return $opps
+            ->groupBy('_ownerid_value')
+            ->map(function (Collection $repOpps) {
+                $name          = $repOpps->first()['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown';
+                $lastCreated   = $repOpps->map(fn ($o) => $o['createdon'])->filter()->sort()->last();
+
+                return [
+                    'owner_id'           => $repOpps->first()['_ownerid_value'] ?? '',
+                    'name'               => $name,
+                    'new_opps'           => $repOpps->count(),
+                    'new_pipeline_value' => $repOpps->sum(fn ($o) => (float) ($o['estimatedvalue'] ?? 0)),
+                    'new_customers'      => $repOpps->pluck('_customerid_value')->filter()->unique()->count(),
+                    'last_opp_created'   => $lastCreated,
+                ];
+            })
+            ->sortByDesc('new_opps')
+            ->values()
+            ->toArray();
     }
 
     // Lấy danh sách user, keyed theo systemuserid — dùng để map owner_id → territory/department/cost_center
