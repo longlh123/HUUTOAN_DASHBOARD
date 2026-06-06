@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { fetchMe } from '../api/auth'
 
 export function AuthCallback() {
   const { login } = useAuth()
@@ -12,8 +13,8 @@ export function AuthCallback() {
 
     if (!token) { navigate('/login'); return }
 
-    login(token)
-      .then(() => navigate('/dashboard/sales', { replace: true }))
+    fetchMe(token)
+      .then(user => { login(token, user); navigate('/dashboard/sales', { replace: true }) })
       .catch(() => navigate('/login', { replace: true }))
   }, [login, navigate])
 

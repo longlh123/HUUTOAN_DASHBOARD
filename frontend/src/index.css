@@ -1187,6 +1187,63 @@ input  { font-family: inherit; }
 
 .login-card__btn:hover { opacity: .85; }
 
+.login-card__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+  text-align: left;
+}
+
+.login-card__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.login-card__input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-h);
+  background: var(--bg);
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color .15s;
+}
+
+.login-card__input:focus { border-color: var(--accent); }
+
+.login-card__error {
+  font-size: 13px;
+  color: #ea580c;
+  margin: 0;
+}
+
+.login-card__submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity .15s;
+  margin-top: 2px;
+}
+
+.login-card__submit:hover:not(:disabled) { opacity: .85; }
+.login-card__submit:disabled { opacity: .5; cursor: not-allowed; }
+
 /* ── Sidebar user ───────────────────────────────────────── */
 .sidebar__user {
   margin-top: auto;
