@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Services\Crm\CrmApiService;
 use App\Http\Controllers\Auth\AzureAuthController;
+use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Dashboard\SalesController;
 use App\Http\Controllers\Dashboard\OpportunitiesController;
 use App\Http\Controllers\Dashboard\KpiController;
@@ -15,6 +16,9 @@ Route::middleware('web')->prefix('auth/azure')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->get('/auth/me', [AzureAuthController::class, 'me']);
+
+Route::post('/auth/login',                               [AuthController::class, 'login']);
+Route::middleware('auth:sanctum')->post('/auth/logout',  [AuthController::class, 'logout']);
 
 // Dev-only: tạo test user và trả token (chỉ chạy khi APP_ENV=local)
 if (app()->isLocal()) {

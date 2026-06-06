@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { AuthUser } from '../api/auth'
-import { fetchMe } from '../api/auth'
+import { fetchMe, logoutApi } from '../api/auth'
 
 const TOKEN_KEY = 'ht_token'
 
@@ -9,8 +9,8 @@ type AuthContextValue = {
   user:    AuthUser | null
   token:   string | null
   loading: boolean
-  login:   (token: string) => Promise<void>
-  logout:  () => void
+  login:   (token: string, user: AuthUser) => void
+  logout:  () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -29,14 +29,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  async function login(newToken: string) {
-    const u = await fetchMe(newToken)
+  function login(newToken: string, newUser: AuthUser) {
     localStorage.setItem(TOKEN_KEY, newToken)
     setToken(newToken)
-    setUser(u)
+    setUser(newUser)
   }
 
-  function logout() {
+  async function logout() {
+    const t = localStorage.getItem(TOKEN_KEY)
+    if (t) await logoutApi(t).catch(() => {})
     localStorage.removeItem(TOKEN_KEY)
     setToken(null)
     setUser(null)
