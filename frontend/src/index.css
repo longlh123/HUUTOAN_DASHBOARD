@@ -1244,6 +1244,44 @@ input  { font-family: inherit; }
 .login-card__submit:hover:not(:disabled) { opacity: .85; }
 .login-card__submit:disabled { opacity: .5; cursor: not-allowed; }
 
+.login-card__ms-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 20px;
+  background: var(--bg);
+  color: var(--text-h);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  box-sizing: border-box;
+  transition: background .15s, border-color .15s;
+}
+.login-card__ms-btn:hover {
+  background: var(--surface);
+  border-color: #0078d4;
+}
+
+.login-card__divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.login-card__divider::before,
+.login-card__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 /* ── Sidebar user ───────────────────────────────────────── */
 .sidebar__user {
   margin-top: auto;

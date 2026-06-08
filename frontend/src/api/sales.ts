@@ -196,6 +196,17 @@ export type WeeklyDealItem = {
   value: number
 }
 
+export type DeviceProductLineItem = {
+  name:  string
+  count: number
+  pct:   number
+}
+
+export type DeviceProductLineData = {
+  total: number
+  items: DeviceProductLineItem[]
+}
+
 export type DateRange = { from: string; to: string }
 export type GroupBy   = 'day' | 'week' | 'month' | 'quarter'
 
@@ -260,6 +271,9 @@ async function apiDelete(url: string): Promise<void> {
 function qs(range: DateRange, extra: Record<string, string> = {}): string {
   return new URLSearchParams({ from: range.from, to: range.to, ...extra }).toString()
 }
+
+export const fetchDeviceByProductLine = (range: DateRange) =>
+  apiFetch<DeviceProductLineData>(`/api/dashboard/devices/by-product-line?${qs(range)}`)
 
 export const fetchTopAccounts = (range: DateRange, territory: string, department?: string) =>
   apiFetch<TopAccountItem[]>(`${BASE}/top-accounts?${qs(range, { territory, ...(department ? { department } : {}) })}`)
