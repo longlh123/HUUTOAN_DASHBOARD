@@ -40,6 +40,82 @@ class CrmApiService
         return $this->fetch($entity, $params);
     }
 
+    /**
+     * Fetch tất cả records bằng cách follow @odata.nextLink (server-driven paging).
+     * Không dùng $top — thay bằng Prefer: odata.maxpagesize=5000 để D365 trả nextLink.
+     * Trả về mảng flat của tất cả records.
+     */
+    public function getAll(string $entity, array $params = [], int $pageSize = 5000): array
+    {
+        $all = [];
+
+        $response = $this->fetchPaged($entity, $params, $pageSize);
+        $all      = array_merge($all, $response['value'] ?? []);
+
+        while (!empty($response['@odata.nextLink'])) {
+            $response = $this->fetchAbsolute($response['@odata.nextLink'], $pageSize);
+            $all      = array_merge($all, $response['value'] ?? []);
+        }
+
+        return $all;
+    }
+
+    private function fetchPaged(string $entity, array $params, int $pageSize): array
+    {
+        $response = Http::withToken($this->tokenService->getToken())
+            ->baseUrl(config('crm.base_url') . "/api/data/{$this->apiVersion}/")
+            ->withHeaders([
+                'OData-MaxVersion' => '4.0',
+                'OData-Version'    => '4.0',
+                'Accept'           => 'application/json',
+                'Prefer'           => 'odata.include-annotations="*",odata.maxpagesize=' . $pageSize,
+            ])
+            ->get($entity, $params);
+
+        if ($response->unauthorized()) {
+            $this->tokenService->forceRefresh();
+            $response = Http::withToken($this->tokenService->getToken())
+                ->baseUrl(config('crm.base_url') . "/api/data/{$this->apiVersion}/")
+                ->withHeaders([
+                    'OData-MaxVersion' => '4.0',
+                    'OData-Version'    => '4.0',
+                    'Accept'           => 'application/json',
+                    'Prefer'           => 'odata.include-annotations="*",odata.maxpagesize=' . $pageSize,
+                ])
+                ->get($entity, $params);
+        }
+
+        $response->throw();
+        return $response->json();
+    }
+
+    private function fetchAbsolute(string $url, int $pageSize = 5000): array
+    {
+        $response = Http::withToken($this->tokenService->getToken())
+            ->withHeaders([
+                'OData-MaxVersion' => '4.0',
+                'OData-Version'    => '4.0',
+                'Accept'           => 'application/json',
+                'Prefer'           => 'odata.include-annotations="*",odata.maxpagesize=' . $pageSize,
+            ])
+            ->get($url);
+
+        if ($response->unauthorized()) {
+            $this->tokenService->forceRefresh();
+            $response = Http::withToken($this->tokenService->getToken())
+                ->withHeaders([
+                    'OData-MaxVersion' => '4.0',
+                    'OData-Version'    => '4.0',
+                    'Accept'           => 'application/json',
+                    'Prefer'           => 'odata.include-annotations="*",odata.maxpagesize=' . $pageSize,
+                ])
+                ->get($url);
+        }
+
+        $response->throw();
+        return $response->json();
+    }
+
     private function fetch(string $entity, array $params): array
     {
         $response = $this->client()->get($entity, $params);

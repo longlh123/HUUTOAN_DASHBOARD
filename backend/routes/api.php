@@ -7,6 +7,7 @@ use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Dashboard\SalesController;
 use App\Http\Controllers\Dashboard\OpportunitiesController;
 use App\Http\Controllers\Dashboard\KpiController;
+use App\Http\Controllers\Dashboard\DeviceController;
 use App\Http\Controllers\Dashboard\UsersController;
 
 // Azure AD OAuth — web middleware cần thiết cho session (OAuth state)
@@ -73,6 +74,11 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/sales/by-rep',           [SalesController::class,        'byRep']);
         Route::get('/sales/by-team',          [SalesController::class,        'byTeam']);
         Route::get('/sales/request-type',     [SalesController::class,         'requestTypeCrosstab']);
+        Route::get('/devices/by-product-line',    [DeviceController::class, 'byProductLine']);
+        Route::get('/devices/agreement-overview', [DeviceController::class, 'agreementOverview']);
+        Route::get('/devices/agreements',              [DeviceController::class, 'agreements']);
+        Route::get('/devices/maintenance-schedule',    [DeviceController::class, 'maintenanceSchedule']);
+        Route::get('/devices/service-centers',         [DeviceController::class, 'serviceCenters']);
         Route::get('/opportunities/pipeline', [OpportunitiesController::class, 'pipeline']);
         Route::get('/opportunities/quality',  [OpportunitiesController::class, 'quality']);
         Route::get('/opportunities/activity', [OpportunitiesController::class, 'activity']);

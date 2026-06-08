@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@huutoan.com'],
             [
                 'name'       => 'Admin',
-                'password'   => 'admin123',
+                'password'   => bcrypt('admin123'),
                 'is_admin'   => true,
                 'territory'  => null,
                 'department' => null,

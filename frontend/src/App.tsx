@@ -8,6 +8,7 @@ import { FinanceDashboard } from './pages/FinanceDashboard'
 import { KpiSettingsPage } from './pages/KpiSettingsPage'
 import { UsersPage } from './pages/UsersPage'
 import { RequestTypePage } from './pages/RequestTypePage'
+import { DeviceDashboard } from './pages/DeviceDashboard'
 import { LoginPage } from './pages/LoginPage'
 import { AuthCallback } from './pages/AuthCallback'
 
@@ -44,7 +45,8 @@ export default function App() {
           }>
             <Route path="/dashboard/sales"    element={<SalesDashboard />} />
             <Route path="/dashboard/services" element={<ServicesDashboard />} />
-            <Route path="/dashboard/finance"  element={<FinanceDashboard />} />
+            <Route path="/dashboard/finance"   element={<FinanceDashboard />} />
+            <Route path="/dashboard/devices"  element={<DeviceDashboard />} />
             <Route path="/settings/kpi"            element={<KpiSettingsPage />} />
             <Route path="/users"                   element={<UsersPage />} />
             <Route path="/analytics/request-type"  element={<RequestTypePage />} />
