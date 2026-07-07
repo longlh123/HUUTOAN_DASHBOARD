@@ -9,6 +9,7 @@ use App\Http\Controllers\Dashboard\OpportunitiesController;
 use App\Http\Controllers\Dashboard\KpiController;
 use App\Http\Controllers\Dashboard\DeviceController;
 use App\Http\Controllers\Dashboard\UsersController;
+use App\Http\Controllers\Dashboard\FinanceController;
 
 // Azure AD OAuth — web middleware cần thiết cho session (OAuth state)
 Route::middleware('web')->prefix('auth/azure')->group(function () {
@@ -87,6 +88,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/sales/kpi-quarterly',    [SalesController::class,  'kpiQuarterly']);
         Route::get('/users',                  [UsersController::class,  'index']);
         Route::put('/users/{id}',             [UsersController::class,  'update']);
+
+        Route::get('/finance/summary',         [FinanceController::class, 'summary']);
+        Route::get('/finance/by-period',       [FinanceController::class, 'byPeriod']);
+        Route::get('/finance/debt-aging',      [FinanceController::class, 'debtAging']);
+        Route::get('/finance/cost-comparison', [FinanceController::class, 'costComparison']);
+        Route::get('/finance/cost-comparison/{itemNumber}/bom', [FinanceController::class, 'costBomBreakdown']);
 
         Route::get('/kpi',                    [KpiController::class, 'index']);
         Route::get('/kpi/performance',        [KpiController::class, 'performance']);

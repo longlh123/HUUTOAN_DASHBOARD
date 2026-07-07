@@ -10,10 +10,11 @@ type Props = {
 }
 
 const PAGE_SIZE = 10
+const currentYear    = new Date().getFullYear()
 const currentQuarter = Math.ceil((new Date().getMonth() + 1) / 3)
-const nextQ1 = (currentQuarter % 4) + 1
-const nextQ2 = (nextQ1 % 4) + 1
-const nextQ3 = (nextQ2 % 4) + 1
+const nextQ1     = (currentQuarter % 4) + 1
+const nextQ1Year = currentQuarter === 4 ? currentYear + 1 : currentYear
+const nextQ2     = (nextQ1 % 4) + 1
 
 function potentialColor(label: string): string {
   switch (label.toLowerCase()) {
@@ -74,9 +75,10 @@ function isUrgent(iso: string | null, days: number): boolean {
   return diff >= 0 && diff <= days
 }
 
-function oppQuarter(iso: string | null): number | null {
+function oppQuarterYear(iso: string | null): { quarter: number; year: number } | null {
   if (!iso) return null
-  return Math.ceil((new Date(iso).getMonth() + 1) / 3)
+  const d = new Date(iso)
+  return { quarter: Math.ceil((d.getMonth() + 1) / 3), year: d.getFullYear() }
 }
 
 type SortCol = 'potential' | 'value' | 'close_date'
@@ -132,16 +134,20 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
     return c >= 3 ? 'Đủ pipeline' : c >= 1.5 ? 'Cần thêm' : 'Thiếu pipeline'
   }
 
-  const prevQ = currentQuarter === 1 ? 4 : currentQuarter - 1
-  const resolvedQ = topWinFilter === 'ALL' ? null
-    : topWinFilter === 'PREV'    ? prevQ
-    : topWinFilter === 'CURRENT' ? currentQuarter
-    : nextQ1
+  const prevQ    = currentQuarter === 1 ? 4 : currentQuarter - 1
+  const prevYear = currentQuarter === 1 ? currentYear - 1 : currentYear
+  const resolved = topWinFilter === 'ALL' ? null
+    : topWinFilter === 'PREV'    ? { quarter: prevQ,         year: prevYear }
+    : topWinFilter === 'CURRENT' ? { quarter: currentQuarter, year: currentYear }
+    : { quarter: nextQ1, year: nextQ1Year }
 
   const allTopWin      = data.top_win ?? []
-  const filteredTopWin = (resolvedQ === null
+  const filteredTopWin = (resolved === null
     ? allTopWin
-    : allTopWin.filter(o => oppQuarter(o.estimated_close) === resolvedQ)
+    : allTopWin.filter(o => {
+        const oq = oppQuarterYear(o.estimated_close)
+        return oq !== null && oq.quarter === resolved.quarter && oq.year === resolved.year
+      })
   ).slice().sort((a, b) => {
     let cmp = 0
     if (sortCol === 'potential') {
@@ -171,19 +177,23 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
           </div>
         </div>
         <div className="card">
-          <div className="kpi-card__label">Weighted Pipeline</div>
-          <div className="kpi-card__value">{fmtVND(data.weighted_pipeline)}</div>
-          <div className="kpi-card__sub">theo xac suat chot</div>
+          <div className="kpi-card__label">Du bao quy hien tai</div>
+          <div className="kpi-card__value">{fmtVND(data.forecast_current_quarter)}</div>
+          <div className="kpi-card__sub">
+            {data.forecast_current_quarter_count} co hoi con lai trong Q{currentQuarter}
+          </div>
         </div>
         <div className="card">
           <div className="kpi-card__label">Du bao quy tiep theo</div>
           <div className="kpi-card__value">{fmtVND(data.forecast_next_quarter)}</div>
-          <div className="kpi-card__sub">theo EstimatedCloseDate trong Q{nextQ1}</div>
+          <div className="kpi-card__sub">
+            {data.forecast_next_quarter_count} co hoi trong Q{nextQ1}
+          </div>
         </div>
         <div className="card">
-          <div className="kpi-card__label">Du bao 2 quy tiep theo</div>
-          <div className="kpi-card__value">{fmtVND(data.forecast_next_2q)}</div>
-          <div className="kpi-card__sub">{fmtVND(data.forecast_next_3q)} trong 3 quy tiep theo</div>
+          <div className="kpi-card__label">Weighted Pipeline</div>
+          <div className="kpi-card__value">{fmtVND(data.weighted_pipeline)}</div>
+          <div className="kpi-card__sub">theo xac suat chot</div>
         </div>
       </div>
 
@@ -253,11 +263,11 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
               )}
 
               <div className="gap-target__forecast">
-                <p className="gap-target__forecast-title">Kha nang dat target tu pipeline:</p>
+                <p className="gap-target__forecast-title">Kha nang dat target Q{currentQuarter} tu pipeline:</p>
                 {[
-                  { label: 'Quy tiep theo',    forecast: data.forecast_next_quarter, note: `Q${nextQ1}` },
-                  { label: '2 quy tiep theo', forecast: data.forecast_next_2q,      note: `Q${nextQ1}–Q${nextQ2}` },
-                  { label: '3 quy tiep theo', forecast: data.forecast_next_3q,      note: `Q${nextQ1}–Q${nextQ3}` },
+                  { label: 'Quy hien tai', forecast: data.forecast_current_quarter,                              note: `Q${currentQuarter}` },
+                  { label: '+ 1 quy toi',  forecast: data.forecast_current_quarter + data.forecast_next_quarter, note: `Q${currentQuarter}–Q${nextQ1}` },
+                  { label: '+ 2 quy toi',  forecast: data.forecast_current_quarter + data.forecast_next_2q,      note: `Q${currentQuarter}–Q${nextQ2}` },
                 ].map(({ label, forecast, note }) => {
                   const projected    = currentGap.actual + forecast
                   const projectedPct = currentGap.target > 0
@@ -294,9 +304,9 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
               onChange={e => setTopWinFilter(e.target.value as 'ALL' | 'PREV' | 'CURRENT' | 'NEXT')}
             >
               <option value="ALL">Tat ca</option>
-              <option value="PREV">Quy truoc (Q{prevQ})</option>
-              <option value="CURRENT">Quy hien tai (Q{currentQuarter})</option>
-              <option value="NEXT">Quy tiep theo (Q{nextQ1})</option>
+              <option value="PREV">Quy truoc (Q{prevQ}/{prevYear})</option>
+              <option value="CURRENT">Quy hien tai (Q{currentQuarter}/{currentYear})</option>
+              <option value="NEXT">Quy tiep theo (Q{nextQ1}/{nextQ1Year})</option>
             </select>
           </div>
           <table className="leaderboard">

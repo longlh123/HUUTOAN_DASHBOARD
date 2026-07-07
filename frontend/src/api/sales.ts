@@ -85,9 +85,11 @@ export type PipelineData = {
   weighted_pipeline: number
   by_potential: PotentialData[]
   by_stage: StageData[]
+  forecast_current_quarter: number
+  forecast_current_quarter_count: number
   forecast_next_quarter: number
+  forecast_next_quarter_count: number
   forecast_next_2q: number
-  forecast_next_3q: number
   aging: AgingOpp[]
   top_win: TopWinOpp[]
 }
@@ -210,8 +212,82 @@ export type DeviceProductLineData = {
 export type DateRange = { from: string; to: string }
 export type GroupBy   = 'day' | 'week' | 'month' | 'quarter'
 
-const BASE     = '/api/dashboard/sales'
-const OPP_BASE = '/api/dashboard/opportunities'
+export type FinanceSummary = {
+  total_revenue: number
+  invoice_count: number
+}
+
+export type FinancePeriodData = {
+  period: string
+  value:  number
+  count:  number
+}
+
+export type DebtAgingItem = {
+  account_num:  string
+  name:         string
+  description:  string
+  trans_date:   string | null
+  due_date:     string | null
+  amount:       number
+  days_overdue: number | null
+}
+
+export type DebtAging = {
+  ar: DebtAgingItem[]
+  ap: DebtAgingItem[]
+}
+
+export type CostComparisonItem = {
+  item_number:    string
+  name:           string
+  standard_price: number
+  standard_date:  string | null
+  planned_price:  number
+  planned_date:   string | null
+  diff:           number
+  diff_pct:       number | null
+  has_bom:        boolean
+}
+
+export type CostBomComponent = {
+  item_number:    string
+  name:           string
+  qty:            number
+  unit:           string
+  standard_price: number | null
+  planned_price:  number | null
+  standard_total: number | null
+  planned_total:  number | null
+  diff:           number | null
+}
+
+export type CostBomBreakdown = {
+  bom_id:          string | null
+  item_number:     string
+  item_name:       string
+  components:      CostBomComponent[]
+  rollup_standard: number
+  rollup_planned:  number
+}
+
+export type CostComparisonSummary = {
+  total_items:   number
+  both_prices:   number
+  different:     number
+  exact_match:   number
+  only_standard: number
+  only_planned:  number
+}
+
+export type CostComparison = {
+  summary: CostComparisonSummary
+  items:   CostComparisonItem[]
+}
+
+const BASE          = '/api/dashboard/sales'
+const OPP_BASE      = '/api/dashboard/opportunities'
+const FINANCE_BASE  = '/api/dashboard/finance'
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('ht_token')
@@ -313,6 +389,21 @@ export const fetchRequestTypeCrosstab = (year: number, territory: string, depart
 
 export const fetchKpiQuarterly = (year: number, territory: string, department?: string) =>
   apiFetch<KpiQuarterly>(`${BASE}/kpi-quarterly?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)
+
+export const fetchFinanceSummary  = (range: DateRange, territory: string) =>
+  apiFetch<FinanceSummary>(`${FINANCE_BASE}/summary?${qs(range, { territory })}`)
+
+export const fetchFinanceByPeriod = (range: DateRange, groupBy: GroupBy, territory: string) =>
+  apiFetch<FinancePeriodData[]>(`${FINANCE_BASE}/by-period?${qs(range, { group_by: groupBy, territory })}`)
+
+export const fetchDebtAging = () =>
+  apiFetch<DebtAging>(`${FINANCE_BASE}/debt-aging`)
+
+export const fetchCostComparison = () =>
+  apiFetch<CostComparison>(`${FINANCE_BASE}/cost-comparison`)
+
+export const fetchCostBomBreakdown = (itemNumber: string) =>
+  apiFetch<CostBomBreakdown>(`${FINANCE_BASE}/cost-comparison/${encodeURIComponent(itemNumber)}/bom`)
 
 export const fetchCrmUsers = () =>
   apiFetch<CrmUser[]>('/api/dashboard/sales/users')

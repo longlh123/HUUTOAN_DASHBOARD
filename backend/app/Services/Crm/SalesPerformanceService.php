@@ -569,24 +569,31 @@ class SalesPerformanceService
             ->sortByDesc('value')
             ->values();
 
-        $nextQStart = $now->copy()->addQuarters(1)->startOfQuarter();
-        $nextQ1End  = $now->copy()->addQuarters(1)->endOfQuarter();
-        $nextQ2End  = $now->copy()->addQuarters(2)->endOfQuarter();
-        $nextQ3End  = $now->copy()->addQuarters(3)->endOfQuarter();
+        $currentQStart = $now->copy()->startOfQuarter();
+        $currentQEnd   = $now->copy()->endOfQuarter();
+        $nextQStart    = $now->copy()->addQuarters(1)->startOfQuarter();
+        $nextQ1End     = $now->copy()->addQuarters(1)->endOfQuarter();
+        $nextQ2End     = $now->copy()->addQuarters(2)->endOfQuarter();
 
-        $fNextQ = $opps->filter(fn ($o) =>
+        // Opp con ton dong trong quy hien tai — tinh tu dau quy (khong phai tu hom nay),
+        // vi opp da qua EstimatedCloseDate nhung van con Open la opp can hoi thuc sale.
+        $currentQOpps = $opps->filter(fn ($o) =>
+            !empty($o['estimatedclosedate']) &&
+            Carbon::parse($o['estimatedclosedate'])->between($currentQStart, $currentQEnd)
+        );
+        $fCurrentQ      = $currentQOpps->sum($maxQuoteValue);
+        $fCurrentQCount = $currentQOpps->count();
+
+        $nextQOpps = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
             Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ1End)
-        )->sum($maxQuoteValue);
+        );
+        $fNextQ      = $nextQOpps->sum($maxQuoteValue);
+        $fNextQCount = $nextQOpps->count();
 
         $f2Q = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
             Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ2End)
-        )->sum($maxQuoteValue);
-
-        $f3Q = $opps->filter(fn ($o) =>
-            !empty($o['estimatedclosedate']) &&
-            Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ3End)
         )->sum($maxQuoteValue);
 
         $aging = $opps
@@ -641,9 +648,11 @@ class SalesPerformanceService
             'weighted_pipeline' => round($weighted),
             'by_potential'      => $byPotential->toArray(),
             'by_stage'          => $byStage->toArray(),
-            'forecast_next_quarter' => round($fNextQ),
+            'forecast_current_quarter'       => round($fCurrentQ),
+            'forecast_current_quarter_count' => $fCurrentQCount,
+            'forecast_next_quarter'       => round($fNextQ),
+            'forecast_next_quarter_count' => $fNextQCount,
             'forecast_next_2q'  => round($f2Q),
-            'forecast_next_3q'  => round($f3Q),
             'aging'             => $aging->toArray(),
             'top_win'           => $topWin->toArray(),
         ];
@@ -791,29 +800,33 @@ class SalesPerformanceService
 
     private function fetchOpenOpportunities(): Collection
     {
-        $data = $this->api->get('opportunities', [
-            '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,ab_process_stage_code,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,ab_project_potential_code',
-            '$filter'  => 'statecode eq 0',
-            '$orderby' => 'createdon desc',
-            '$top'     => '500',
-        ], ttl: 300);
+        // Dung getAll() (follow @odata.nextLink) thay vi $top cung - CRM co the co > 500 open opp
+        // va $top se cat mat du lieu ma khong bao loi.
+        $data = cache()->remember('crm:pipeline_open_opportunities', 300, fn () =>
+            $this->api->getAll('opportunities', [
+                '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,closeprobability,ab_process_stage_code,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,ab_project_potential_code',
+                '$filter'  => 'statecode eq 0',
+                '$orderby' => 'createdon desc',
+            ])
+        );
 
-        return collect($data['value'] ?? []);
+        return collect($data);
     }
 
     private function fetchWonQuotesForOpps(array $oppIds): Collection
     {
         if (empty($oppIds)) return collect();
 
-        $data = $this->api->get('quotes', [
-            '$select' => 'totalamount,_opportunityid_value',
-            '$filter' => 'statecode eq 2',
-            '$top'    => '5000',
-        ], ttl: 300);
+        $all = cache()->remember('crm:pipeline_won_quotes', 300, fn () =>
+            $this->api->getAll('quotes', [
+                '$select' => 'totalamount,_opportunityid_value',
+                '$filter' => 'statecode eq 2',
+            ])
+        );
 
         $oppIdSet = array_flip($oppIds);
 
-        return collect($data['value'] ?? [])
+        return collect($all)
             ->filter(fn ($q) =>
                 !empty($q['_opportunityid_value']) &&
                 isset($oppIdSet[$q['_opportunityid_value']])
@@ -821,19 +834,21 @@ class SalesPerformanceService
             ->groupBy('_opportunityid_value');
     }
 
+    // Lấy Active (1) + Draft (0) quotes — dùng getAll() để pagination, tránh $top=5000 cutoff
     private function fetchAnyQuotesForOpps(array $oppIds): Collection
     {
         if (empty($oppIds)) return collect();
 
-        $data = $this->api->get('quotes', [
-            '$select' => 'quoteid,totalamount,_opportunityid_value',
-            '$filter' => '_opportunityid_value ne null',
-            '$top'    => '5000',
-        ], ttl: 300);
+        $all = cache()->remember('crm:pipeline_active_draft_quotes', 300, fn () =>
+            $this->api->getAll('quotes', [
+                '$select' => 'quoteid,totalamount,_opportunityid_value',
+                '$filter' => 'statecode eq 0 or statecode eq 1',
+            ])
+        );
 
         $oppIdSet = array_flip($oppIds);
 
-        return collect($data['value'] ?? [])
+        return collect($all)
             ->filter(fn ($q) =>
                 !empty($q['_opportunityid_value']) &&
                 isset($oppIdSet[$q['_opportunityid_value']])

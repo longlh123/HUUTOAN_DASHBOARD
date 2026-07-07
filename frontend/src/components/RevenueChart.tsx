@@ -19,6 +19,7 @@ type Props = {
   loading:            boolean
   groupBy:            GroupBy
   quarterlyTargets?:  KpiQuarterly
+  title?:             string
 }
 
 type MergedPoint = { key: string; label: string; current: number; prev: number; target?: number }
@@ -79,7 +80,7 @@ function applyRollingTarget(
   return data.map((d, i) => ({ ...d, target: bases[i] }))
 }
 
-export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTargets }: Props) {
+export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTargets, title = 'Giá trị hợp đồng theo kỳ' }: Props) {
   const base   = mergeData(data, prevData, groupBy)
   const hasKpi = quarterlyTargets && (quarterlyTargets.q1 + quarterlyTargets.q2 + quarterlyTargets.q3 + quarterlyTargets.q4) > 0
 
@@ -87,7 +88,7 @@ export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTarget
 
   return (
     <div className="card">
-      <h2 className="card__title">Giá trị hợp đồng theo kỳ</h2>
+      <h2 className="card__title">{title}</h2>
 
       <div className={loading ? 'chart-wrap chart-wrap--loading' : 'chart-wrap'}>
         {!loading && data.length === 0 && prevData.length === 0 ? (
