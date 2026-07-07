@@ -10,6 +10,21 @@ services:
       - /app/vendor
     env_file:
       - ./backend/.env
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: db_huutoan
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: huutoan
+      MYSQL_PASSWORD: secret
+    ports:
+      - "3307:3306"   # map ra ngoài port khác để tránh đụng MySQL local nếu có
+    volumes:
+      - mysql_data:/var/lib/mysql
 
   frontend:
     build:
@@ -24,3 +39,6 @@ services:
       - VITE_API_URL=http://backend:8000
     depends_on:
       - backend
+
+volumes:
+  mysql_data:
