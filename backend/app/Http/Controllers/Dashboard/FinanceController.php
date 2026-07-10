@@ -38,6 +38,13 @@ class FinanceController extends Controller
         return $this->success($this->finance->debtAging());
     }
 
+    public function advanceLedger(Request $request): JsonResponse
+    {
+        [$from, $to] = $this->parseDateRange($request);
+
+        return $this->success($this->finance->advanceLedger($from, $to));
+    }
+
     public function costComparison(): JsonResponse
     {
         return $this->success($this->cost->comparison());

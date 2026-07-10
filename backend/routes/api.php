@@ -82,6 +82,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/devices/service-centers',         [DeviceController::class, 'serviceCenters']);
         Route::get('/opportunities/pipeline', [OpportunitiesController::class, 'pipeline']);
         Route::get('/opportunities/quality',  [OpportunitiesController::class, 'quality']);
+        Route::get('/opportunities/quality-detail', [OpportunitiesController::class, 'qualityDetail']);
         Route::get('/opportunities/activity', [OpportunitiesController::class, 'activity']);
 
         Route::get('/sales/users',            [SalesController::class,  'users']);
@@ -92,6 +93,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/finance/summary',         [FinanceController::class, 'summary']);
         Route::get('/finance/by-period',       [FinanceController::class, 'byPeriod']);
         Route::get('/finance/debt-aging',      [FinanceController::class, 'debtAging']);
+        Route::get('/finance/advance-ledger',  [FinanceController::class, 'advanceLedger']);
         Route::get('/finance/cost-comparison', [FinanceController::class, 'costComparison']);
         Route::get('/finance/cost-comparison/{itemNumber}/bom', [FinanceController::class, 'costBomBreakdown']);
 

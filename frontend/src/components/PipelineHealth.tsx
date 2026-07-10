@@ -16,6 +16,19 @@ const nextQ1     = (currentQuarter % 4) + 1
 const nextQ1Year = currentQuarter === 4 ? currentYear + 1 : currentYear
 const nextQ2     = (nextQ1 % 4) + 1
 
+function targetLevel(pct: number): 'high' | 'mid' | 'low' {
+  if (pct >= 70) return 'high'
+  if (pct >= 40) return 'mid'
+  return 'low'
+}
+
+function targetLabel(pct: number): string {
+  if (pct >= 100) return 'Dat target'
+  if (pct >= 70)  return 'Kha thi'
+  if (pct >= 40)  return 'Can no luc'
+  return 'Rui ro'
+}
+
 function potentialColor(label: string): string {
   switch (label.toLowerCase()) {
     case 'high':   return '#16a34a'
@@ -46,17 +59,31 @@ function PotentialBreakdown({ items, total }: { items: PotentialData[]; total: n
       </div>
       <div className="gap-target__forecast">
         <p className="gap-target__forecast-title">Phan bo theo muc do:</p>
-        {items.map(item => (
-          <div key={item.label} className="gap-target__forecast-row">
-            <span className="potential-breakdown__dot" style={{ backgroundColor: potentialColor(item.label) }} />
-            <span className="gap-target__forecast-label">{item.label}</span>
-            <span className="gap-target__forecast-add">{item.count}/{total}</span>
-            <span className="gap-target__forecast-projected">{fmtVND(item.value)}</span>
-            <span className="gap-target__forecast-pct gap-target__forecast-pct--hit">
-              {item.pct}%
-            </span>
-          </div>
-        ))}
+        <table className="leaderboard gap-target__forecast-table">
+          <thead>
+            <tr>
+              <th>Muc do</th>
+              <th style={{ textAlign: 'right' }}>So luong</th>
+              <th style={{ textAlign: 'right' }}>Gia tri</th>
+              <th style={{ textAlign: 'right' }}>Ty le</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => (
+              <tr key={item.label}>
+                <td className="leaderboard__name">
+                  <span className="potential-breakdown__dot" style={{ backgroundColor: potentialColor(item.label) }} />
+                  {item.label}
+                </td>
+                <td className="leaderboard__value" style={{ color: 'var(--text-h)' }}>{item.count}/{total}</td>
+                <td className="leaderboard__value" style={{ color: 'var(--text-h)' }}>{fmtVND(item.value)}</td>
+                <td className="gap-target__forecast-pct gap-target__forecast-pct--hit" style={{ textAlign: 'right' }}>
+                  {item.pct}%
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -264,30 +291,61 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
 
               <div className="gap-target__forecast">
                 <p className="gap-target__forecast-title">Kha nang dat target Q{currentQuarter} tu pipeline:</p>
-                {[
-                  { label: 'Quy hien tai', forecast: data.forecast_current_quarter,                              note: `Q${currentQuarter}` },
-                  { label: '+ 1 quy toi',  forecast: data.forecast_current_quarter + data.forecast_next_quarter, note: `Q${currentQuarter}–Q${nextQ1}` },
-                  { label: '+ 2 quy toi',  forecast: data.forecast_current_quarter + data.forecast_next_2q,      note: `Q${currentQuarter}–Q${nextQ2}` },
-                ].map(({ label, forecast, note }) => {
-                  const projected    = currentGap.actual + forecast
-                  const projectedPct = currentGap.target > 0
-                    ? Math.min(999, Math.round(projected / currentGap.target * 100))
-                    : 0
-                  const willHit = projected >= currentGap.target
-                  return (
-                    <div key={label} className="gap-target__forecast-row">
-                      <span className="gap-target__forecast-label">{label}</span>
-                      <span className="gap-target__forecast-add">+{fmtVND(forecast)}</span>
-                      <span className="gap-target__forecast-projected">
-                        {fmtVND(projected)}
-                      </span>
-                      <span className={`gap-target__forecast-pct gap-target__forecast-pct--${willHit ? 'hit' : 'miss'}`}>
-                        {willHit ? '✓' : '✗'} {projectedPct}%
-                      </span>
-                      {note && <span className="gap-target__forecast-note">{note}</span>}
-                    </div>
-                  )
-                })}
+                <div className="table-wrap">
+                <table className="leaderboard gap-target__forecast-table">
+                  <thead>
+                    <tr>
+                      <th>Kich ban</th>
+                      <th style={{ textAlign: 'right' }}>Pipeline (raw)</th>
+                      <th style={{ textAlign: 'right' }}>Pipeline (weighted)</th>
+                      <th style={{ textAlign: 'right' }}>Du kien dat</th>
+                      <th style={{ textAlign: 'right' }}>% Target</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      {
+                        label:    'Quy hien tai',
+                        raw:      data.forecast_current_quarter,
+                        weighted: data.forecast_current_quarter_weighted,
+                        note:     `Q${currentQuarter}`,
+                      },
+                      {
+                        label:    '+ 1 quy toi',
+                        raw:      data.forecast_current_quarter + data.forecast_next_quarter,
+                        weighted: data.forecast_current_quarter_weighted + data.forecast_next_quarter_weighted,
+                        note:     `Q${currentQuarter}–Q${nextQ1}`,
+                      },
+                      {
+                        label:    '+ 2 quy toi',
+                        raw:      data.forecast_current_quarter + data.forecast_next_2q,
+                        weighted: data.forecast_current_quarter_weighted + data.forecast_next_2q_weighted,
+                        note:     `Q${currentQuarter}–Q${nextQ2}`,
+                      },
+                    ].map(({ label, raw, weighted, note }) => {
+                      const projected    = currentGap.actual + weighted
+                      const projectedPct = currentGap.target > 0
+                        ? Math.min(999, Math.round(projected / currentGap.target * 100))
+                        : 0
+                      return (
+                        <tr key={label}>
+                          <td className="leaderboard__name">
+                            {label}
+                            {note && <span className="gap-target__forecast-note">{note}</span>}
+                          </td>
+                          <td className="leaderboard__value">{fmtVND(raw)}</td>
+                          <td className="leaderboard__value">{fmtVND(weighted)}</td>
+                          <td className="leaderboard__value">{fmtVND(projected)}</td>
+                          <td style={{ textAlign: 'right' }}>
+                            <span className={`win-rate win-rate--${targetLevel(projectedPct)}`}>{targetLabel(projectedPct)}</span>
+                            <div style={{ fontSize: 11, color: 'var(--text)', marginTop: 2 }}>{projectedPct}%</div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                </div>
               </div>
             </div>
           )}

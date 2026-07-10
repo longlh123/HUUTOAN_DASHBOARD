@@ -184,6 +184,70 @@ class FinanceService
     }
 
     /**
+     * Bao cao chi tiet TK 1411 (Tam ung cho nhan vien) theo tung vendor — so du dau ky, phat sinh trong ky, so du cuoi ky.
+     * SummaryAccountId tren VendTransBiEntities la tai khoan GL kiem soat cua giao dich — loc thang '1411',
+     * khong can join qua GL dimension (da xac nhan qua data that: chi ~4000 dong tu 2018, nhe, fetch 1 lan).
+     */
+    public function advanceLedger(Carbon $from, Carbon $to): array
+    {
+        $trans = cache()->remember('erp:advance_1411_trans', 600, fn () =>
+            $this->api->getAll('VendTransBiEntities', [
+                '$select'  => 'AccountNum,Txt,TransDate,AmountMST',
+                '$filter'  => "SummaryAccountId eq '1411'",
+            ])
+        );
+
+        $directory = $this->fetchVendorDirectory(collect($trans)->pluck('AccountNum')->filter()->unique()->values()->toArray());
+
+        $fromTs = $from->copy()->startOfDay()->timestamp;
+        $toTs   = $to->copy()->endOfDay()->timestamp;
+
+        $byVendor = collect($trans)
+            ->filter(fn ($t) => !empty($t['AccountNum']) && !empty($t['TransDate']))
+            ->groupBy('AccountNum');
+
+        $vendors = $byVendor
+            ->map(function ($items, $accountNum) use ($directory, $fromTs, $toTs) {
+                $opening = $items
+                    ->filter(fn ($t) => strtotime($t['TransDate']) < $fromTs)
+                    ->sum(fn ($t) => (float) ($t['AmountMST'] ?? 0));
+
+                $periodTrans = $items
+                    ->filter(fn ($t) => strtotime($t['TransDate']) >= $fromTs && strtotime($t['TransDate']) <= $toTs)
+                    ->sortBy('TransDate')
+                    ->values();
+
+                if ($periodTrans->isEmpty()) return null;
+
+                $periodSum = $periodTrans->sum(fn ($t) => (float) ($t['AmountMST'] ?? 0));
+
+                return [
+                    'account_num'     => $accountNum,
+                    'name'            => $directory[$accountNum]['name'] ?? $accountNum,
+                    'opening_balance' => round($opening),
+                    'transactions'    => $periodTrans->map(fn ($t) => [
+                        'date'        => substr($t['TransDate'], 0, 10),
+                        'description' => $t['Txt'] ?? '',
+                        'amount'      => (float) ($t['AmountMST'] ?? 0),
+                    ])->toArray(),
+                    'closing_balance' => round($opening + $periodSum),
+                ];
+            })
+            ->filter()
+            ->sortBy('name')
+            ->values();
+
+        return [
+            'summary' => [
+                'vendor_count'    => $vendors->count(),
+                'total_opening'   => round($vendors->sum('opening_balance')),
+                'total_closing'   => round($vendors->sum('closing_balance')),
+            ],
+            'vendors' => $vendors->toArray(),
+        ];
+    }
+
+    /**
      * @return array<string, array{name: string, internal: bool}>
      */
     private function fetchVendorDirectory(array $accountNumbers): array

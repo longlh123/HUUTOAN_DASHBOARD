@@ -29,6 +29,15 @@ class OpportunitiesController extends Controller
         }
     }
 
+    public function qualityDetail(Request $request): JsonResponse
+    {
+        try {
+            return $this->success($this->sales->opportunityQualityDetail($request->query('territory'), $request->query('department')));
+        } catch (\Throwable $e) {
+            return $this->error('QUALITY_DETAIL_ERROR', $e->getMessage(), 500);
+        }
+    }
+
     public function activity(Request $request): JsonResponse
     {
         $from = Carbon::parse($request->query('from', now()->startOfYear()->toDateString()));

@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
-import type { FinanceSummary, FinancePeriodData, PeriodData, DateRange, GroupBy, DebtAging, CostComparison } from '../api/sales'
-import { fetchFinanceSummary, fetchFinanceByPeriod, fetchDebtAging, fetchCostComparison } from '../api/sales'
+import type { FinanceSummary, FinancePeriodData, PeriodData, DateRange, GroupBy, DebtAging, CostComparison, AdvanceLedger } from '../api/sales'
+import { fetchFinanceSummary, fetchFinanceByPeriod, fetchDebtAging, fetchCostComparison, fetchAdvanceLedger } from '../api/sales'
 import { getPresetRange, prevYearRange } from '../utils/date'
 import { FinanceKpiCards } from '../components/FinanceKpiCards'
 import { RevenueChart } from '../components/RevenueChart'
 import { DebtDashboard } from '../components/DebtDashboard'
 import { CostComparisonTable } from '../components/CostComparisonTable'
+import { AdvanceLedgerTable } from '../components/AdvanceLedgerTable'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { TerritoryFilter } from '../components/TerritoryFilter'
 import type { Territory } from '../components/TerritoryFilter'
 import { useAuth } from '../contexts/AuthContext'
 
-type Tab = 'revenue' | 'debt' | 'cost'
+type Tab = 'revenue' | 'debt' | 'cost' | 'advance'
 
 function toPeriodData(data: FinancePeriodData[]): PeriodData[] {
   return data.map(d => ({ period: d.period, value: d.value, deals: d.count }))
@@ -44,6 +45,10 @@ export function FinanceDashboard() {
   const [costComparison,        setCostComparison]        = useState<CostComparison | null>(null)
   const [costComparisonLoading, setCostComparisonLoading] = useState(true)
   const [costVisited,           setCostVisited]           = useState(false)
+
+  const [advanceLedger,        setAdvanceLedger]        = useState<AdvanceLedger | null>(null)
+  const [advanceLedgerLoading, setAdvanceLedgerLoading] = useState(true)
+  const [advanceVisited,       setAdvanceVisited]       = useState(false)
 
   useEffect(() => {
     setFetching(true)
@@ -82,10 +87,21 @@ export function FinanceDashboard() {
       .finally(() => setCostComparisonLoading(false))
   }, [costVisited])
 
+  // Tạm ứng TK 1411 — lọc theo kỳ (range) như Doanh thu, không lọc territory
+  useEffect(() => {
+    if (!advanceVisited) return
+    setAdvanceLedgerLoading(true)
+    fetchAdvanceLedger(range)
+      .then(setAdvanceLedger)
+      .catch(() => {})
+      .finally(() => setAdvanceLedgerLoading(false))
+  }, [advanceVisited, range])
+
   function switchTab(tab: Tab) {
     setActiveTab(tab)
     if (tab === 'debt') setDebtVisited(true)
     if (tab === 'cost') setCostVisited(true)
+    if (tab === 'advance') setAdvanceVisited(true)
   }
 
   return (
@@ -110,10 +126,16 @@ export function FinanceDashboard() {
           >
             Chi phí
           </button>
+          <button
+            className={`section-nav__link${activeTab === 'advance' ? ' section-nav__link--active' : ''}`}
+            onClick={() => switchTab('advance')}
+          >
+            Tạm ứng
+          </button>
         </nav>
-        {activeTab === 'revenue' && (
+        {(activeTab === 'revenue' || activeTab === 'advance') && (
           <div className="dashboard__filters">
-            <TerritoryFilter value={territory} onChange={setTerritory} disabled={!isAdmin} />
+            {activeTab === 'revenue' && <TerritoryFilter value={territory} onChange={setTerritory} disabled={!isAdmin} />}
             <DateRangeFilter onChange={(r, g) => { setRange(r); setGroupBy(g) }} />
           </div>
         )}
@@ -144,6 +166,12 @@ export function FinanceDashboard() {
       {activeTab === 'cost' && (
         <div className="dashboard-section">
           <CostComparisonTable data={costComparison} loading={costComparisonLoading} />
+        </div>
+      )}
+
+      {activeTab === 'advance' && (
+        <div className="dashboard-section">
+          <AdvanceLedgerTable data={advanceLedger} loading={advanceLedgerLoading} />
         </div>
       )}
     </div>

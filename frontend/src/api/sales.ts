@@ -87,9 +87,12 @@ export type PipelineData = {
   by_stage: StageData[]
   forecast_current_quarter: number
   forecast_current_quarter_count: number
+  forecast_current_quarter_weighted: number
   forecast_next_quarter: number
   forecast_next_quarter_count: number
+  forecast_next_quarter_weighted: number
   forecast_next_2q: number
+  forecast_next_2q_weighted: number
   aging: AgingOpp[]
   top_win: TopWinOpp[]
 }
@@ -166,6 +169,23 @@ export type OppQualityRow = {
   backdated:         number
 }
 
+export type OppQualityDetailRow = {
+  opportunity_id:  string
+  opp_number:      string
+  crm_link:        string
+  name:            string
+  owner_id:        string
+  owner:           string
+  estimated_value: number
+  created_on:      string | null
+  estimated_close: string | null
+  has_quote:       boolean
+  days_to_quote:   number | null
+  complete:        boolean
+  no_activity_30d: boolean
+  backdated:       boolean
+}
+
 export type OppActivityRow = {
   owner_id:           string
   name:               string
@@ -236,6 +256,29 @@ export type DebtAgingItem = {
 export type DebtAging = {
   ar: DebtAgingItem[]
   ap: DebtAgingItem[]
+}
+
+export type AdvanceTransaction = {
+  date:        string
+  description: string
+  amount:      number
+}
+
+export type AdvanceVendor = {
+  account_num:     string
+  name:            string
+  opening_balance: number
+  transactions:    AdvanceTransaction[]
+  closing_balance: number
+}
+
+export type AdvanceLedger = {
+  summary: {
+    vendor_count:  number
+    total_opening: number
+    total_closing: number
+  }
+  vendors: AdvanceVendor[]
 }
 
 export type CostComparisonItem = {
@@ -381,6 +424,9 @@ export const fetchGapToTarget = (year: number, territory: string, department?: s
 export const fetchOppQuality = (territory: string, department?: string) =>
   apiFetch<OppQualityRow[]>(`${OPP_BASE}/quality?${new URLSearchParams({ territory, ...(department ? { department } : {}) })}`)
 
+export const fetchOppQualityDetail = (territory: string, department?: string) =>
+  apiFetch<OppQualityDetailRow[]>(`${OPP_BASE}/quality-detail?${new URLSearchParams({ territory, ...(department ? { department } : {}) })}`)
+
 export const fetchOppActivity = (range: DateRange, territory: string, department?: string) =>
   apiFetch<OppActivityRow[]>(`${OPP_BASE}/activity?${qs(range, { territory, ...(department ? { department } : {}) })}`)
 
@@ -398,6 +444,9 @@ export const fetchFinanceByPeriod = (range: DateRange, groupBy: GroupBy, territo
 
 export const fetchDebtAging = () =>
   apiFetch<DebtAging>(`${FINANCE_BASE}/debt-aging`)
+
+export const fetchAdvanceLedger = (range: DateRange) =>
+  apiFetch<AdvanceLedger>(`${FINANCE_BASE}/advance-ledger?${qs(range)}`)
 
 export const fetchCostComparison = () =>
   apiFetch<CostComparison>(`${FINANCE_BASE}/cost-comparison`)

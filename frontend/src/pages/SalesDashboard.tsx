@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, KpiQuarterly, OppQualityRow, DateRange, GroupBy } from '../api/sales'
-import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchOppQuality } from '../api/sales'
+import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, KpiQuarterly, OppQualityRow, OppQualityDetailRow, DateRange, GroupBy } from '../api/sales'
+import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchOppQuality, fetchOppQualityDetail } from '../api/sales'
 import { getPresetRange, prevYearRange } from '../utils/date'
 import { KpiCards } from '../components/KpiCards'
 import { RevenueChart } from '../components/RevenueChart'
@@ -9,6 +9,7 @@ import { SalesTeamLeaderboard } from '../components/SalesTeamLeaderboard'
 import { DateRangeFilter } from '../components/DateRangeFilter'
 import { PipelineHealth } from '../components/PipelineHealth'
 import { OppQualityTable } from '../components/OppQualityTable'
+import { OppQualityDetailTable } from '../components/OppQualityDetailTable'
 import { TerritoryFilter } from '../components/TerritoryFilter'
 import { WeeklyWonChart } from '../components/WeeklyWonChart'
 import { TeamTargetChart } from '../components/TeamTargetChart'
@@ -53,6 +54,9 @@ export function SalesDashboard() {
   const [qualityLoading,  setQualityLoading]  = useState(true)
   const [qualityFetching, setQualityFetching] = useState(false)
   const [qualityVisited,  setQualityVisited]  = useState(false)
+
+  const [qualityDetailData,    setQualityDetailData]    = useState<OppQualityDetailRow[]>([])
+  const [qualityDetailLoading, setQualityDetailLoading] = useState(true)
 
   const [allDepartments, setAllDepartments] = useState<string[]>([])
 
@@ -110,6 +114,15 @@ export function SalesDashboard() {
       .then(setQualityData)
       .catch(() => {})
       .finally(() => { setQualityLoading(false); setQualityFetching(false) })
+  }, [territory, department, qualityVisited])
+
+  useEffect(() => {
+    if (!qualityVisited) return
+    setQualityDetailLoading(true)
+    fetchOppQualityDetail(territory, department)
+      .then(setQualityDetailData)
+      .catch(() => {})
+      .finally(() => setQualityDetailLoading(false))
   }, [territory, department, qualityVisited])
 
   function switchTab(tab: Tab) {
@@ -203,6 +216,7 @@ export function SalesDashboard() {
             {qualityFetching && !qualityLoading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
           </div>
           <OppQualityTable data={qualityData} loading={qualityLoading} />
+          <OppQualityDetailTable data={qualityDetailData} loading={qualityDetailLoading} />
         </div>
       )}
     </div>

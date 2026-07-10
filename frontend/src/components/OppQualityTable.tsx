@@ -80,7 +80,7 @@ export function OppQualityTable({ data, loading }: Props) {
   return (
     <div className="card">
       <h2 className="card__title">Chat luong Opportunity theo sales</h2>
-      <p className="card__desc">Chi tinh cac Opp chua co hop dong won — top 500 Opp dang mo</p>
+      <p className="card__desc">Chi tinh cac Opp dang mo, chua co hop dong won</p>
       <div className="table-wrap">
         <table className="leaderboard">
           <thead>

@@ -380,7 +380,7 @@ class SalesPerformanceService
             '$filter'  => implode(' and ', [
                 'statecode eq 2',
                 "closedon ge {$from->copy()->startOfDay()->utc()->toIso8601String()}",
-                "closedon lt {$to->copy()->endOfDay()->utc()->toIso8601String()}",
+                "closedon lt {$to->copy()->addDay()->startOfDay()->utc()->toIso8601String()}",
             ]),
             '$orderby' => 'closedon asc',
         ], ttl: $this->ttlFor($to));
@@ -396,7 +396,7 @@ class SalesPerformanceService
             '$filter'  => implode(' and ', [
                 '(statecode eq 2 or statecode eq 3)',
                 "closedon ge {$from->copy()->startOfDay()->utc()->toIso8601String()}",
-                "closedon lt {$to->copy()->endOfDay()->utc()->toIso8601String()}",
+                "closedon lt {$to->copy()->addDay()->startOfDay()->utc()->toIso8601String()}",
             ]),
             '$orderby' => 'closedon asc',
         ], ttl: $this->ttlFor($to));
@@ -581,20 +581,24 @@ class SalesPerformanceService
             !empty($o['estimatedclosedate']) &&
             Carbon::parse($o['estimatedclosedate'])->between($currentQStart, $currentQEnd)
         );
-        $fCurrentQ      = $currentQOpps->sum($maxQuoteValue);
-        $fCurrentQCount = $currentQOpps->count();
+        $fCurrentQ         = $currentQOpps->sum($maxQuoteValue);
+        $fCurrentQCount    = $currentQOpps->count();
+        $fCurrentQWeighted = $currentQOpps->sum(fn ($o) => $maxQuoteValue($o) * $potentialProb($o));
 
         $nextQOpps = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
             Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ1End)
         );
-        $fNextQ      = $nextQOpps->sum($maxQuoteValue);
-        $fNextQCount = $nextQOpps->count();
+        $fNextQ         = $nextQOpps->sum($maxQuoteValue);
+        $fNextQCount    = $nextQOpps->count();
+        $fNextQWeighted = $nextQOpps->sum(fn ($o) => $maxQuoteValue($o) * $potentialProb($o));
 
-        $f2Q = $opps->filter(fn ($o) =>
+        $next2QOpps = $opps->filter(fn ($o) =>
             !empty($o['estimatedclosedate']) &&
             Carbon::parse($o['estimatedclosedate'])->between($nextQStart, $nextQ2End)
-        )->sum($maxQuoteValue);
+        );
+        $f2Q         = $next2QOpps->sum($maxQuoteValue);
+        $f2QWeighted = $next2QOpps->sum(fn ($o) => $maxQuoteValue($o) * $potentialProb($o));
 
         $aging = $opps
             ->filter(fn ($o) =>
@@ -648,11 +652,14 @@ class SalesPerformanceService
             'weighted_pipeline' => round($weighted),
             'by_potential'      => $byPotential->toArray(),
             'by_stage'          => $byStage->toArray(),
-            'forecast_current_quarter'       => round($fCurrentQ),
-            'forecast_current_quarter_count' => $fCurrentQCount,
-            'forecast_next_quarter'       => round($fNextQ),
-            'forecast_next_quarter_count' => $fNextQCount,
-            'forecast_next_2q'  => round($f2Q),
+            'forecast_current_quarter'          => round($fCurrentQ),
+            'forecast_current_quarter_count'    => $fCurrentQCount,
+            'forecast_current_quarter_weighted' => round($fCurrentQWeighted),
+            'forecast_next_quarter'          => round($fNextQ),
+            'forecast_next_quarter_count'    => $fNextQCount,
+            'forecast_next_quarter_weighted' => round($fNextQWeighted),
+            'forecast_next_2q'          => round($f2Q),
+            'forecast_next_2q_weighted' => round($f2QWeighted),
             'aging'             => $aging->toArray(),
             'top_win'           => $topWin->toArray(),
         ];
@@ -714,6 +721,16 @@ class SalesPerformanceService
 
                 $targetTotals[$q] += $effective;
                 $actualTotals[$q] += $actual;
+            }
+        }
+
+        // Cong them actual cua sale chua khai KPI target — khong co target nen khong rollover,
+        // chi cong thang doanh so vao actual de Gap to Target phan anh dung tong doanh thu thuc te.
+        $targetedIds = $targets->pluck('_crc83_ab_user_value')->filter()->flip()->toArray();
+        foreach ($actualByOwner as $ownerId => $quarters) {
+            if (isset($targetedIds[$ownerId])) continue;
+            foreach ([1, 2, 3, 4] as $q) {
+                $actualTotals[$q] += (float) $quarters->get($q, 0);
             }
         }
 
@@ -869,7 +886,7 @@ class SalesPerformanceService
             '$filter'  => implode(' and ', [
                 'statecode ne 0',
                 "actualclosedate ge {$from->copy()->startOfDay()->utc()->toIso8601String()}",
-                "actualclosedate lt {$to->copy()->endOfDay()->utc()->toIso8601String()}",
+                "actualclosedate lt {$to->copy()->addDay()->startOfDay()->utc()->toIso8601String()}",
             ]),
             '$top'     => '5000',
         ], ttl: $this->ttlFor($to));
@@ -1159,16 +1176,110 @@ class SalesPerformanceService
         return $byRep->toArray();
     }
 
+    /**
+     * Danh sach tung Opp rieng le kem co quality flag — dung de sale/quan ly click vao
+     * tung opp kiem tra va cap nhat truc tiep tren CRM (khac voi opportunityQuality() dang
+     * gop theo salesperson).
+     */
+    public function opportunityQualityDetail(?string $territory = null, ?string $department = null): array
+    {
+        $opps = $this->filterByTerritory(
+            $this->filterByDepartment($this->fetchOpenOppsForQuality(), $department),
+            $territory
+        );
+
+        $oppIds   = $opps->pluck('opportunityid')->filter()->values()->toArray();
+        $wonByOpp = $this->fetchWonQuotesForOpps($oppIds);
+        $opps     = $opps->filter(fn ($o) => !isset($wonByOpp[$o['opportunityid']]));
+
+        $oppIdSet    = array_flip($opps->pluck('opportunityid')->filter()->toArray());
+        $quotesByOpp = $this->fetchAllQuotesForOpps()
+            ->filter(fn ($q) => isset($oppIdSet[$q['_opportunityid_value'] ?? '']))
+            ->groupBy('_opportunityid_value');
+
+        try {
+            $activeOppIds = $this->fetchRecentOppActivities(30)
+                ->pluck('_regardingobjectid_value')
+                ->filter()
+                ->flip()
+                ->toArray();
+        } catch (\Throwable) {
+            $activeOppIds = [];
+        }
+
+        $cutoff30 = now()->subDays(30);
+
+        return $opps
+            ->map(function ($opp) use ($quotesByOpp, $activeOppIds, $cutoff30) {
+                $oppId  = $opp['opportunityid'];
+                $quotes = $quotesByOpp->get($oppId, collect());
+
+                $hasQuote    = $quotes->isNotEmpty();
+                $daysToQuote = null;
+                $noActivity  = false;
+
+                if ($hasQuote) {
+                    $oppCreated = Carbon::parse($opp['createdon']);
+                    $firstQuote = $quotes->map(fn ($q) => Carbon::parse($q['createdon']))->sort()->first();
+                    if ($firstQuote) {
+                        $daysToQuote = max(0, (int) $oppCreated->diffInDays($firstQuote));
+                    }
+
+                    $quoteRecentlyUpdated = $quotes->contains(
+                        fn ($q) => !empty($q['modifiedon']) && Carbon::parse($q['modifiedon'])->gte($cutoff30)
+                    );
+                    $noActivity = !isset($activeOppIds[$oppId]) && !$quoteRecentlyUpdated;
+                }
+
+                $hasCloseDate = !empty($opp['estimatedclosedate']);
+                $hasAmount    = (float) ($opp['estimatedvalue'] ?? 0) > 0;
+                $hasStage     = !empty($opp['ab_process_stage_code']);
+                $hasCustomer  = !empty($opp['_customerid_value']);
+                $hasPotential = !empty($opp['ab_project_potential_code']);
+                $complete     = $hasCloseDate && $hasAmount && $hasStage && $hasCustomer && $hasPotential;
+
+                $backdated = false;
+                if ($hasCloseDate && !empty($opp['createdon'])) {
+                    $created   = Carbon::parse($opp['createdon']);
+                    $closeDate = Carbon::parse($opp['estimatedclosedate']);
+                    $backdated = $closeDate->gte($created) && $created->diffInDays($closeDate) <= 7;
+                }
+
+                return [
+                    'opportunity_id'  => $oppId,
+                    'opp_number'      => $opp['ab_opportunitynumber'] ?? '',
+                    'crm_link'        => config('crm.base_url') . '/main.aspx?etn=opportunity&id=' . $oppId . '&pagetype=entityrecord',
+                    'name'            => $opp['name'] ?? '',
+                    'owner_id'        => $opp['_ownerid_value'] ?? '',
+                    'owner'           => $opp['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
+                    'estimated_value' => (float) ($opp['estimatedvalue'] ?? 0),
+                    'created_on'      => !empty($opp['createdon']) ? Carbon::parse($opp['createdon'])->toDateString() : null,
+                    'estimated_close' => $hasCloseDate ? Carbon::parse($opp['estimatedclosedate'])->toDateString() : null,
+                    'has_quote'       => $hasQuote,
+                    'days_to_quote'   => $daysToQuote,
+                    'complete'        => $complete,
+                    'no_activity_30d' => $noActivity,
+                    'backdated'       => $backdated,
+                ];
+            })
+            ->sortByDesc('created_on')
+            ->values()
+            ->toArray();
+    }
+
     private function fetchOpenOppsForQuality(): Collection
     {
-        $data = $this->api->get('opportunities', [
-            '$select'  => 'opportunityid,estimatedvalue,ab_process_stage_code,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,_customerid_value,ab_project_potential_code',
-            '$filter'  => 'statecode eq 0',
-            '$orderby' => 'createdon desc',
-            '$top'     => '500',
-        ], ttl: 300);
+        // Dung getAll() (follow @odata.nextLink) thay vi $top cung — CRM co the co > 500 open opp
+        // va $top se cat mat du lieu ma khong bao loi (da gap bug nay o pipeline()).
+        $data = cache()->remember('crm:quality_open_opportunities', 300, fn () =>
+            $this->api->getAll('opportunities', [
+                '$select'  => 'opportunityid,ab_opportunitynumber,name,estimatedvalue,ab_process_stage_code,estimatedclosedate,createdon,_ownerid_value,_owningbusinessunit_value,_customerid_value,ab_project_potential_code',
+                '$filter'  => 'statecode eq 0',
+                '$orderby' => 'createdon desc',
+            ])
+        );
 
-        return collect($data['value'] ?? []);
+        return collect($data);
     }
 
     private function fetchAllQuotesForOpps(): Collection
@@ -1197,7 +1308,7 @@ class SalesPerformanceService
     public function oppActivity(Carbon $from, Carbon $to, ?string $territory = null, ?string $department = null): array
     {
         $fromStr = $from->copy()->startOfDay()->utc()->toIso8601String();
-        $toStr   = $to->copy()->endOfDay()->utc()->toIso8601String();
+        $toStr   = $to->copy()->addDay()->startOfDay()->utc()->toIso8601String();
 
         $data = $this->api->get('opportunities', [
             '$select'  => 'opportunityid,createdon,estimatedvalue,_ownerid_value,_customerid_value',
@@ -1234,7 +1345,7 @@ class SalesPerformanceService
     public function quoteRequestTypeCrosstab(int $year, ?string $territory = null, ?string $department = null): array
     {
         $from = Carbon::create($year, 1, 1)->startOfDay()->utc()->toIso8601String();
-        $to   = Carbon::create($year, 12, 31)->endOfDay()->utc()->toIso8601String();
+        $to   = Carbon::create($year, 12, 31)->addDay()->startOfDay()->utc()->toIso8601String();
 
         $data = $this->api->get('quotes', [
             '$select' => 'quoteid,ab_request_type_code,_ownerid_value,statecode',
