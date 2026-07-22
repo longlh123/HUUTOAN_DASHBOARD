@@ -3,8 +3,8 @@ import {
   PieChart, Pie, Cell, Tooltip as PieTooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as BarTooltip, ResponsiveContainer,
 } from 'recharts'
-import type { DeviceProductLineData, AgreementOverview, AgreementItem, AlertRecord, MaintenanceScheduleData, MaintenanceScheduleItem, ServiceCenter } from '../api/device'
-import { fetchDeviceByProductLine, fetchAgreementOverview, fetchAgreements, fetchMaintenanceSchedule, fetchServiceCenters } from '../api/device'
+import type { DeviceProductLineData, AgreementOverview, AgreementItem, AlertRecord, MaintenanceScheduleData, MaintenanceScheduleItem, ServiceCenter, WorkOrderPartsData, WorkOrderPartsSummaryRow } from '../api/device'
+import { fetchDeviceByProductLine, fetchAgreementOverview, fetchAgreements, fetchMaintenanceSchedule, fetchServiceCenters, fetchWorkOrderParts, fetchWorkOrdersPartsSummary } from '../api/device'
 import { getYearRange } from '../utils/date'
 import { fmtVND } from '../utils/format'
 
@@ -13,6 +13,7 @@ import { fmtVND } from '../utils/format'
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS        = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i)
 const PAGE_SIZE    = 20
+const SUMMARY_PAGE_SIZE = 10
 
 const PIE_COLORS = ['#C8102E', '#1e40af', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#6b7280']
 
@@ -59,6 +60,16 @@ const CAL_LEGEND = [
 ]
 
 const UNASSIGNED_KEY = '—'
+
+function toDateStr(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+function defaultSummaryFrom(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 6)
+  return toDateStr(d)
+}
 
 function woStatusClass(code: number): string {
   if (code === 500000000) return 'win-rate win-rate--low'
@@ -199,6 +210,70 @@ function AlertTable({ rows, emptyMsg }: { rows: AlertRecord[]; emptyMsg: string 
   )
 }
 
+/* ── WorkOrderPartsPanel ────────────────────────────────────────────────── */
+
+function WorkOrderPartsPanel({ workOrderId }: { workOrderId: string }) {
+  const [data,    setData]    = useState<WorkOrderPartsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+
+  useEffect(() => {
+    setLoading(true); setError(null)
+    fetchWorkOrderParts(workOrderId)
+      .then(setData)
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [workOrderId])
+
+  const rowLabel = (p: WorkOrderPartsData['all'][number]) => (
+    <>
+      {p.item_number && <span style={{ color: 'var(--text-muted)' }}>{p.item_number} — </span>}
+      {p.name}
+      <span style={{ color: 'var(--text-muted)' }}> ×{p.qty_needed}</span>
+    </>
+  )
+
+  return (
+    <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px dashed var(--border)' }}>
+      {loading && <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Đang tải vật tư…</p>}
+      {error && <p style={{ fontSize: 11, color: '#ea580c', margin: 0 }}>{error}</p>}
+      {!loading && !error && data && data.all.length === 0 && (
+        <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>Không có vật tư nào cho WO này</p>
+      )}
+      {!loading && !error && data && data.all.length > 0 && (
+        <>
+          {data.shortage.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                ⚠ Thiếu hàng ({data.shortage.length})
+              </div>
+              {data.shortage.map((p, i) => (
+                <div key={i} style={{ fontSize: 11, padding: '2px 0', color: 'var(--text)' }}>
+                  {rowLabel(p)}
+                  <span style={{ color: '#dc2626', fontWeight: 600, marginLeft: 4 }}>(thiếu {p.shortage})</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+              Tất cả vật tư ({data.all.length})
+            </div>
+            {data.all.map((p, i) => (
+              <div key={i} style={{ fontSize: 11, padding: '2px 0', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                <span style={{ color: 'var(--text)' }}>{rowLabel(p)}</span>
+                {p.sufficient === true && <span style={{ color: '#16a34a', fontSize: 10, whiteSpace: 'nowrap' }}>Đủ</span>}
+                {p.sufficient === false && <span style={{ color: '#dc2626', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>Thiếu {p.shortage}</span>}
+                {p.is_write_in && <span style={{ color: 'var(--text-muted)', fontSize: 10, whiteSpace: 'nowrap' }}>Mua ngoài</span>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 /* ── Main component ─────────────────────────────────────────────────────── */
 
 export function DeviceDashboard() {
@@ -224,6 +299,17 @@ export function DeviceDashboard() {
   const [schedStatus,   setSchedStatus]   = useState<number | ''>('')
   const [schedCalMonth, setSchedCalMonth] = useState(CURRENT_MONTH_IN_QUARTER)
   const [selectedDay,   setSelectedDay]   = useState<{ engineer: string; dateKey: string; items: MaintenanceScheduleItem[] } | null>(null)
+  const [expandedWO,    setExpandedWO]    = useState<string | null>(null)
+
+  /* --- Tab 3: Parts summary table --- */
+  const [summaryFrom,    setSummaryFrom]    = useState(defaultSummaryFrom())
+  const [summaryTo,      setSummaryTo]      = useState(toDateStr(new Date()))
+  const [summaryData,    setSummaryData]    = useState<WorkOrderPartsSummaryRow[] | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError,   setSummaryError]   = useState<string | null>(null)
+  const [summaryVisited, setSummaryVisited] = useState(false)
+  const [summaryTypeFilter, setSummaryTypeFilter] = useState('')
+  const [summaryPage,       setSummaryPage]       = useState(1)
 
   /* --- Tab 2: Agreement List --- */
   const [typeFilter,   setTypeFilter]   = useState('')
@@ -269,12 +355,30 @@ export function DeviceDashboard() {
       .then(setSchedData).catch((e: Error) => setSchedError(e.message)).finally(() => setSchedLoading(false))
   }, [tab, schedYear, schedQuarter])
 
+  useEffect(() => { setExpandedWO(null) }, [selectedDay])
+
   useEffect(() => {
     if (tab !== 'centers') return
     if (!centersVisited) setCentersVisited(true)
     setCentersLoading(true); setCentersError(null)
     fetchServiceCenters()
       .then(setCenters).catch((e: Error) => setCentersError(e.message)).finally(() => setCentersLoading(false))
+  }, [tab])
+
+  function runSummarySearch() {
+    setSummaryVisited(true)
+    setSummaryLoading(true); setSummaryError(null)
+    setSummaryTypeFilter(''); setSummaryPage(1)
+    fetchWorkOrdersPartsSummary(summaryFrom, summaryTo)
+      .then(setSummaryData)
+      .catch((e: Error) => setSummaryError(e.message))
+      .finally(() => setSummaryLoading(false))
+  }
+
+  useEffect(() => {
+    if (tab !== 'schedule' || summaryVisited) return
+    runSummarySearch()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
   /* --- Derived: agreements --- */
@@ -368,6 +472,24 @@ export function DeviceDashboard() {
     const last = new Date(schedYear, calMonth, 0).getDate()
     return Array.from({ length: last }, (_, i) => i + 1)
   }, [schedYear, calMonth])
+
+  /* --- Derived: WO parts summary table --- */
+  const summaryTypes = useMemo(() => {
+    const s = new Set((summaryData ?? []).map(r => r.type).filter(Boolean))
+    return Array.from(s).sort()
+  }, [summaryData])
+
+  const filteredSummary = useMemo(() => {
+    if (!summaryTypeFilter) return summaryData ?? []
+    return (summaryData ?? []).filter(r => r.type === summaryTypeFilter)
+  }, [summaryData, summaryTypeFilter])
+
+  const summaryTotalPages = Math.max(1, Math.ceil(filteredSummary.length / SUMMARY_PAGE_SIZE))
+  const summarySafePage   = Math.min(summaryPage, summaryTotalPages)
+  const summaryPageItems  = filteredSummary.slice(
+    (summarySafePage - 1) * SUMMARY_PAGE_SIZE,
+    summarySafePage * SUMMARY_PAGE_SIZE
+  )
 
   const kpis = overview?.kpis
 
@@ -818,13 +940,26 @@ export function DeviceDashboard() {
                                   </a>
                                   <span className={woStatusClass(item.status_code)} style={{ fontSize: 10 }}>{item.status}</span>
                                 </div>
-                                <div style={{ fontSize: 12, color: 'var(--text)' }}>{item.customer || '—'}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text)' }}>
+                                  {item.type && <span style={{ color: 'var(--text-muted)' }}>{item.type} · </span>}
+                                  {item.customer || '—'}
+                                </div>
                                 {(item.region || item.city || item.address) && (
                                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
                                     {[item.region, item.city].filter(Boolean).join(' / ')}
                                     {item.address && <span>{item.region || item.city ? ' — ' : ''}{item.address}</span>}
                                   </div>
                                 )}
+                                <button
+                                  onClick={() => setExpandedWO(id => id === item.id ? null : item.id)}
+                                  style={{
+                                    marginTop: 5, padding: 0, border: 'none', background: 'none',
+                                    color: 'var(--accent)', fontSize: 11, cursor: 'pointer',
+                                  }}
+                                >
+                                  {expandedWO === item.id ? 'Ẩn vật tư ▴' : 'Xem vật tư cần chuẩn bị ▾'}
+                                </button>
+                                {expandedWO === item.id && <WorkOrderPartsPanel workOrderId={item.id} />}
                               </div>
                             ))}
                           </div>
@@ -835,6 +970,99 @@ export function DeviceDashboard() {
                 </>
             </div>
           )}
+
+          {/* ── Bang vat tu theo WO (filter theo khoang ngay) ── */}
+          <div className="card" style={{ marginTop: '1.25rem', padding: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+              <h2 className="card__title" style={{ margin: 0 }}>Bảng vật tư theo WO</h2>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input type="date" value={summaryFrom} onChange={e => setSummaryFrom(e.target.value)} className="date-filter__input" />
+                <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>đến</span>
+                <input type="date" value={summaryTo} onChange={e => setSummaryTo(e.target.value)} className="date-filter__input" />
+                <button className="date-filter__btn date-filter__btn--active" onClick={runSummarySearch} disabled={summaryLoading}>
+                  {summaryLoading ? 'Đang tra cứu…' : 'Tra cứu'}
+                </button>
+                {summaryData && summaryData.length > 0 && (
+                  <select
+                    className="date-filter__input"
+                    value={summaryTypeFilter}
+                    onChange={e => { setSummaryTypeFilter(e.target.value); setSummaryPage(1) }}
+                  >
+                    <option value="">Tất cả loại WO</option>
+                    {summaryTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                )}
+              </div>
+            </div>
+
+            {summaryLoading && <p style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Đang tải…</p>}
+            {summaryError   && <p style={{ textAlign: 'center', padding: '30px 0', color: '#ea580c' }}>{summaryError}</p>}
+            {!summaryLoading && !summaryError && summaryData && (
+              <>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                  {filteredSummary.length} WO có phát sinh vật tư
+                </p>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                        <th style={{ textAlign: 'left', padding: '6px 10px' }}>Mã WO</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px' }}>Loại</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px' }}>KTV</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px', minWidth: 220 }}>Vật tư thiếu</th>
+                        <th style={{ textAlign: 'left', padding: '6px 10px', minWidth: 260 }}>Tất cả vật tư cần</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSummary.length === 0 && (
+                        <tr><td colSpan={5} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>Không có WO nào phát sinh vật tư trong khoảng ngày này</td></tr>
+                      )}
+                      {summaryPageItems.map(row => (
+                        <tr key={row.id} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
+                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                            <a href={crmUrl('ab_work_order', row.id)} target="_blank" rel="noreferrer"
+                               style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 600 }}>{row.code}</a>
+                          </td>
+                          <td style={{ padding: '8px 10px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{row.type || '—'}</td>
+                          <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>{row.engineer || '—'}</td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {row.shortage.length === 0
+                              ? <span style={{ color: 'var(--text-muted)' }}>—</span>
+                              : row.shortage.map((p, i) => (
+                                  <div key={i} style={{ color: '#dc2626', marginBottom: 2 }}>
+                                    {p.item_number && <span>{p.item_number} — </span>}{p.name} <strong>(thiếu {p.shortage})</strong>
+                                  </div>
+                                ))
+                            }
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {row.all.map((p, i) => (
+                              <div key={i} style={{ marginBottom: 2, color: p.sufficient === false ? '#dc2626' : 'var(--text)' }}>
+                                {p.item_number && <span style={{ color: 'var(--text-muted)' }}>{p.item_number} — </span>}
+                                {p.name} ×{p.qty_needed}
+                                {p.sufficient === true  && <span style={{ color: '#16a34a' }}> (đủ)</span>}
+                                {p.sufficient === false && <strong> (thiếu {p.shortage})</strong>}
+                                {p.is_write_in && <span style={{ color: 'var(--text-muted)' }}> (mua ngoài)</span>}
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {summaryTotalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: '1.25rem' }}>
+                    <button className="date-filter__btn" disabled={summarySafePage <= 1}
+                      onClick={() => setSummaryPage(p => p - 1)}>← Trước</button>
+                    <span style={{ lineHeight: '32px', fontSize: 13 }}>Trang {summarySafePage} / {summaryTotalPages}</span>
+                    <button className="date-filter__btn" disabled={summarySafePage >= summaryTotalPages}
+                      onClick={() => setSummaryPage(p => p + 1)}>Tiếp →</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </>
       )}
 

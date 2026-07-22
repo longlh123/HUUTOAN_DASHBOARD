@@ -50,4 +50,17 @@ class DeviceController extends Controller
 
         return $this->success($this->devices->maintenanceSchedule($year, $quarter));
     }
+
+    public function workOrderParts(string $id): JsonResponse
+    {
+        return $this->success($this->devices->workOrderParts($id));
+    }
+
+    public function workOrdersPartsSummary(Request $request): JsonResponse
+    {
+        $from = Carbon::parse($request->query('from', now()->startOfWeek()->toDateString()));
+        $to   = Carbon::parse($request->query('to',   now()->toDateString()));
+
+        return $this->success($this->devices->workOrdersPartsSummary($from, $to));
+    }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Crm;
 
+use App\Services\Erp\ErpApiService;
 use Carbon\Carbon;
 
 class DeviceService
@@ -24,7 +25,7 @@ class DeviceService
         'Lost'    => self::STATUS_LOST,
     ];
 
-    public function __construct(private CrmApiService $api) {}
+    public function __construct(private CrmApiService $api, private ErpApiService $erp) {}
 
     public function byProductLine(Carbon $from, Carbon $to): array
     {
@@ -210,29 +211,31 @@ class DeviceService
         $from = Carbon::create($year, $fromMonth, 1)->startOfDay()->utc()->toIso8601String();
         $to   = Carbon::create($year, $fromMonth, 1)->addMonths(3)->startOfDay()->utc()->toIso8601String();
 
-        $data = $this->api->get('ab_work_orders', [
-            '$select'  => implode(',', [
-                'ab_work_orderid', 'ab_name',
-                'ab_wo_type_code', 'ab_wo_status_code',
-                'ab_planned_start_date',
-                '_ab_service_customer_id_value',
-                '_ab_lead_engineer_id_value', 'ab_technician',
-                '_ab_state_id_value', '_ab_city_id_value',
-                'ab_address_fx',
-                '_ab_agreement_device_id_value',
-                '_ab_organizational_unit_id_value',
-            ]),
-            '$filter'  => implode(' and ', [
-                'ab_wo_type_code eq 500000001',
-                'ab_wo_status_code ne 500000005',
-                "ab_planned_start_date ge {$from}",
-                "ab_planned_start_date lt {$to}",
-            ]),
-            '$orderby' => 'ab_planned_start_date asc',
-            '$top'     => '5000',
-        ], ttl: 300);
-
-        $records     = $data['value'] ?? [];
+        // Hien tat ca loai WO (PM/Repair/Inspection/Rental/...) — khong loc ab_wo_type_code
+        // nua de Lich KTV phan anh dung toan bo lich lam viec cua KTV, khong chi rieng PM.
+        // Dung getAll() (follow @odata.nextLink) thay vi $top cung — 1 quy co the co > 5000 WO.
+        $cacheKey = "crm:maintenance_schedule:{$year}:{$quarter}";
+        $records  = cache()->remember($cacheKey, 300, fn () =>
+            $this->api->getAll('ab_work_orders', [
+                '$select'  => implode(',', [
+                    'ab_work_orderid', 'ab_name',
+                    'ab_wo_type_code', 'ab_wo_status_code',
+                    'ab_planned_start_date',
+                    '_ab_service_customer_id_value',
+                    '_ab_lead_engineer_id_value', 'ab_technician',
+                    '_ab_state_id_value', '_ab_city_id_value',
+                    'ab_address_fx',
+                    '_ab_agreement_device_id_value',
+                    '_ab_organizational_unit_id_value',
+                ]),
+                '$filter'  => implode(' and ', [
+                    'ab_wo_status_code ne 500000005',
+                    "ab_planned_start_date ge {$from}",
+                    "ab_planned_start_date lt {$to}",
+                ]),
+                '$orderby' => 'ab_planned_start_date asc',
+            ])
+        );
         $unscheduled = 0;
         $scheduled   = 0;
         $inProgress  = 0;
@@ -257,6 +260,7 @@ class DeviceService
             $items[] = [
                 'id'            => $r['ab_work_orderid'],
                 'code'          => $r['ab_name'],
+                'type'          => $r['ab_wo_type_code@OData.Community.Display.V1.FormattedValue'] ?? '',
                 'status_code'   => $sc,
                 'status'        => $r['ab_wo_status_code@OData.Community.Display.V1.FormattedValue'] ?? '',
                 'customer'      => $r['_ab_service_customer_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
@@ -280,6 +284,177 @@ class DeviceService
             ],
             'items' => $items,
         ];
+    }
+
+    /**
+     * Danh sach vat tu can cho 1 Work Order + doi chieu ton kho F&O — dung khi click 1 WO
+     * trong Lich KTV de xem can chuan bi/nhap them gi truoc khi thuc hien.
+     *
+     * Nguon: ab_work_order_products (CRM) — chi lay dong co Estimate Quantity >= 1.
+     * Vat tu "Existing" (khong phai Write In) tra cuu ton kho qua product.productnumber
+     * (dang "1001" + Item Number F&O, vd 1001108402514 -> item 108402514) roi SUM
+     * OnHandQuantity tren ABInventWarehousesOnHandV2 (F&O) qua tat ca kho.
+     */
+    public function workOrderParts(string $workOrderId): array
+    {
+        $data = $this->api->get('ab_work_order_products', [
+            '$select' => 'ab_product_name_fx,ab_quantity,ab_select_product_flag',
+            '$filter' => "_ab_work_order_id_value eq {$workOrderId} and ab_quantity ge 1",
+            '$expand' => 'ab_product_id($select=productnumber,name)',
+        ], ttl: 60);
+
+        $rows        = array_map(fn ($r) => $this->parseWorkOrderProductRow($r), $data['value'] ?? []);
+        $itemNumbers = array_values(array_unique(array_filter(array_column($rows, 'item_number'))));
+        $stockByItem = $this->fetchStockByItems($itemNumbers);
+
+        [$all, $shortage] = $this->buildPartsLists($rows, $stockByItem);
+
+        return ['all' => $all, 'shortage' => $shortage];
+    }
+
+    /**
+     * Bang tong hop vat tu can + thieu hang cho TAT CA Work Order trong 1 khoang ngay —
+     * dung cho bang "liet ke tat ca WO" duoi Lich KTV, tranh phai click tung WO de xem.
+     *
+     * Batch 3 buoc de tranh N+1: (1) lay danh sach WO trong khoang ngay, (2) lay tat ca
+     * ab_work_order_products cho toan bo WO do (chunk 15 id/request), (3) lay ton kho F&O
+     * cho toan bo item number xuat hien (1 lan, khong phai tung item).
+     */
+    public function workOrdersPartsSummary(Carbon $from, Carbon $to): array
+    {
+        $fromStr = $from->copy()->startOfDay()->utc()->toIso8601String();
+        $toStr   = $to->copy()->addDay()->startOfDay()->utc()->toIso8601String();
+
+        $wos = $this->api->getAll('ab_work_orders', [
+            '$select'  => implode(',', [
+                'ab_work_orderid', 'ab_name', 'ab_wo_type_code',
+                'ab_planned_start_date', '_ab_lead_engineer_id_value', 'ab_technician',
+            ]),
+            '$filter'  => implode(' and ', [
+                'ab_wo_status_code ne 500000005',
+                "ab_planned_start_date ge {$fromStr}",
+                "ab_planned_start_date lt {$toStr}",
+            ]),
+            '$orderby' => 'ab_planned_start_date asc',
+        ]);
+
+        if (empty($wos)) return [];
+
+        $woIds        = array_column($wos, 'ab_work_orderid');
+        $productsByWo = $this->fetchWorkOrderProductsBulk($woIds);
+
+        $itemNumbers = [];
+        foreach ($productsByWo as $rows) {
+            foreach ($rows as $r) {
+                if ($r['item_number']) $itemNumbers[] = $r['item_number'];
+            }
+        }
+        $stockByItem = $this->fetchStockByItems(array_values(array_unique($itemNumbers)));
+
+        return collect($wos)
+            ->map(function ($wo) use ($productsByWo, $stockByItem) {
+                $rows = $productsByWo[$wo['ab_work_orderid']] ?? [];
+                [$all, $shortage] = $this->buildPartsLists($rows, $stockByItem);
+
+                return [
+                    'id'           => $wo['ab_work_orderid'],
+                    'code'         => $wo['ab_name'],
+                    'type'         => $wo['ab_wo_type_code@OData.Community.Display.V1.FormattedValue'] ?? '',
+                    'engineer'     => $wo['_ab_lead_engineer_id_value@OData.Community.Display.V1.FormattedValue']
+                                   ?? $wo['ab_technician']
+                                   ?? '',
+                    'planned_date' => $wo['ab_planned_start_date'] ?? '',
+                    'all'          => $all,
+                    'shortage'     => $shortage,
+                ];
+            })
+            ->filter(fn ($item) => count($item['all']) > 0)
+            ->values()
+            ->toArray();
+    }
+
+    private function fetchWorkOrderProductsBulk(array $workOrderIds): array
+    {
+        $byWo = [];
+
+        foreach (array_chunk($workOrderIds, 15) as $chunk) {
+            $idFilter = implode(' or ', array_map(fn ($id) => "_ab_work_order_id_value eq {$id}", $chunk));
+            $data = $this->api->get('ab_work_order_products', [
+                '$select' => 'ab_product_name_fx,ab_quantity,ab_select_product_flag,_ab_work_order_id_value',
+                '$filter' => "({$idFilter}) and ab_quantity ge 1",
+                '$expand' => 'ab_product_id($select=productnumber,name)',
+            ], ttl: 60);
+
+            foreach ($data['value'] ?? [] as $r) {
+                $woId = $r['_ab_work_order_id_value'] ?? '';
+                $byWo[$woId][] = $this->parseWorkOrderProductRow($r);
+            }
+        }
+
+        return $byWo;
+    }
+
+    private function parseWorkOrderProductRow(array $r): array
+    {
+        $isWriteIn     = (bool) ($r['ab_select_product_flag'] ?? false);
+        $productNumber = $r['ab_product_id']['productnumber'] ?? null;
+        $itemNumber    = null;
+
+        if (!$isWriteIn && $productNumber && str_starts_with($productNumber, '1001')) {
+            $candidate = substr($productNumber, 4);
+            if ($candidate !== '' && ctype_digit($candidate)) {
+                $itemNumber = $candidate;
+            }
+        }
+
+        return [
+            'name'        => trim($r['ab_product_name_fx'] ?? ''),
+            'qty_needed'  => (float) ($r['ab_quantity'] ?? 0),
+            'is_write_in' => $isWriteIn,
+            'item_number' => $itemNumber,
+        ];
+    }
+
+    /** @return array{0: array, 1: array} [all, shortage] */
+    private function buildPartsLists(array $rows, array $stockByItem): array
+    {
+        $all = collect($rows)->map(function ($p) use ($stockByItem) {
+            $stock    = $p['item_number'] !== null ? ($stockByItem[$p['item_number']] ?? 0.0) : null;
+            $shortage = $stock !== null ? max(0.0, $p['qty_needed'] - $stock) : null;
+
+            return [
+                'item_number' => $p['item_number'],
+                'name'        => $p['name'],
+                'qty_needed'  => $p['qty_needed'],
+                'stock_qty'   => $stock,
+                'shortage'    => $shortage,
+                'is_write_in' => $p['is_write_in'],
+                'sufficient'  => $shortage !== null ? $shortage <= 0 : null,
+            ];
+        })->values();
+
+        $shortage = $all->filter(fn ($p) => $p['sufficient'] === false)->values();
+
+        return [$all->toArray(), $shortage->toArray()];
+    }
+
+    private function fetchStockByItems(array $itemNumbers): array
+    {
+        if (empty($itemNumbers)) return [];
+
+        $filter = implode(' or ', array_map(fn ($n) => "ItemNumber eq '{$n}'", $itemNumbers));
+        $data   = $this->erp->get('ABInventWarehousesOnHandV2', [
+            '$select' => 'ItemNumber,OnHandQuantity',
+            '$filter' => $filter,
+        ], ttl: 300);
+
+        $byItem = [];
+        foreach ($data['value'] ?? [] as $row) {
+            $item = $row['ItemNumber'] ?? '';
+            $byItem[$item] = ($byItem[$item] ?? 0.0) + (float) ($row['OnHandQuantity'] ?? 0);
+        }
+
+        return $byItem;
     }
 
     public function serviceCenters(): array

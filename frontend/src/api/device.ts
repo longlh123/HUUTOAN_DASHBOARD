@@ -61,6 +61,7 @@ export type MaintenanceScheduleKpis = {
 export type MaintenanceScheduleItem = {
   id:            string
   code:          string
+  type:          string
   status_code:   number
   status:        string
   customer:      string
@@ -156,3 +157,32 @@ export type ServiceCenter = {
 
 export const fetchServiceCenters = () =>
   apiFetch<ServiceCenter[]>(`${BASE}/service-centers`)
+
+export type WorkOrderPart = {
+  item_number:  string | null
+  name:         string
+  qty_needed:   number
+  stock_qty:    number | null
+  shortage:     number | null
+  is_write_in:  boolean
+  sufficient:   boolean | null
+}
+
+export type WorkOrderPartsData = {
+  all:      WorkOrderPart[]
+  shortage: WorkOrderPart[]
+}
+
+export const fetchWorkOrderParts = (workOrderId: string) =>
+  apiFetch<WorkOrderPartsData>(`${BASE}/work-orders/${workOrderId}/parts`)
+
+export type WorkOrderPartsSummaryRow = WorkOrderPartsData & {
+  id:           string
+  code:         string
+  type:         string
+  engineer:     string
+  planned_date: string
+}
+
+export const fetchWorkOrdersPartsSummary = (from: string, to: string) =>
+  apiFetch<WorkOrderPartsSummaryRow[]>(`${BASE}/work-orders/parts-summary?from=${from}&to=${to}`)

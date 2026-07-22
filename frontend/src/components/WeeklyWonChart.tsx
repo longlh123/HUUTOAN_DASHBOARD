@@ -37,6 +37,7 @@ export function WeeklyWonChart({ territory, department }: Props) {
   }))
 
   const totalCount = data.reduce((s, d) => s + d.count, 0)
+  const totalRevenue = data.reduce((s, d) => s + d.value, 0)
   const weekRange  = data.length === 7
     ? `${fmtDay(data[0].date)} – ${fmtDay(data[6].date)}`
     : ''
@@ -50,12 +51,15 @@ export function WeeklyWonChart({ territory, department }: Props) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {!loading && totalCount > 0 && (
-            <p style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-h)', margin: 0 }}>
-              {totalCount}
-              <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text)', marginLeft: 6 }}>
-                hợp đồng
-              </span>
-            </p>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-h)', margin: 0, lineHeight: 1.15 }}>
+                {totalCount}
+                <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text)', marginLeft: 6 }}>
+                  hợp đồng
+                </span>
+              </p>
+              <p style={{ fontSize: 12, color: 'var(--text)', fontWeight: 800, margin: 0 }}>{fmtVND(totalRevenue)}</p>
+            </div>
           )}
           <div style={{ display: 'flex', gap: 4 }}>
             <button className="pagination__btn" onClick={() => setWeekOffset(o => o - 1)} title="Tuần trước">←</button>
