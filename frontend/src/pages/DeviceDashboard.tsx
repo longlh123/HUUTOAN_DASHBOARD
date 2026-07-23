@@ -308,7 +308,7 @@ export function DeviceDashboard() {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError,   setSummaryError]   = useState<string | null>(null)
   const [summaryVisited, setSummaryVisited] = useState(false)
-  const [summaryTypeFilter, setSummaryTypeFilter] = useState('')
+  const [summaryWoSearch, setSummaryWoSearch] = useState('')
   const [summaryPage,       setSummaryPage]       = useState(1)
 
   /* --- Tab 2: Agreement List --- */
@@ -368,7 +368,7 @@ export function DeviceDashboard() {
   function runSummarySearch() {
     setSummaryVisited(true)
     setSummaryLoading(true); setSummaryError(null)
-    setSummaryTypeFilter(''); setSummaryPage(1)
+    setSummaryWoSearch(''); setSummaryPage(1)
     fetchWorkOrdersPartsSummary(summaryFrom, summaryTo)
       .then(setSummaryData)
       .catch((e: Error) => setSummaryError(e.message))
@@ -474,15 +474,11 @@ export function DeviceDashboard() {
   }, [schedYear, calMonth])
 
   /* --- Derived: WO parts summary table --- */
-  const summaryTypes = useMemo(() => {
-    const s = new Set((summaryData ?? []).map(r => r.type).filter(Boolean))
-    return Array.from(s).sort()
-  }, [summaryData])
-
   const filteredSummary = useMemo(() => {
-    if (!summaryTypeFilter) return summaryData ?? []
-    return (summaryData ?? []).filter(r => r.type === summaryTypeFilter)
-  }, [summaryData, summaryTypeFilter])
+    const q = summaryWoSearch.trim().toLowerCase()
+    if (!q) return summaryData ?? []
+    return (summaryData ?? []).filter(r => r.code.toLowerCase().includes(q))
+  }, [summaryData, summaryWoSearch])
 
   const summaryTotalPages = Math.max(1, Math.ceil(filteredSummary.length / SUMMARY_PAGE_SIZE))
   const summarySafePage   = Math.min(summaryPage, summaryTotalPages)
@@ -983,14 +979,11 @@ export function DeviceDashboard() {
                   {summaryLoading ? 'Đang tra cứu…' : 'Tra cứu'}
                 </button>
                 {summaryData && summaryData.length > 0 && (
-                  <select
-                    className="date-filter__input"
-                    value={summaryTypeFilter}
-                    onChange={e => { setSummaryTypeFilter(e.target.value); setSummaryPage(1) }}
-                  >
-                    <option value="">Tất cả loại WO</option>
-                    {summaryTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <input type="text" placeholder="Tìm mã WO…"
+                    value={summaryWoSearch}
+                    onChange={e => { setSummaryWoSearch(e.target.value); setSummaryPage(1) }}
+                    style={{ flex: '1 1 180px', padding: '6px 12px', fontSize: 13,
+                      border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
                 )}
               </div>
             </div>

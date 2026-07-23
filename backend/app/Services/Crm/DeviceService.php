@@ -298,8 +298,8 @@ class DeviceService
     public function workOrderParts(string $workOrderId): array
     {
         $data = $this->api->get('ab_work_order_products', [
-            '$select' => 'ab_product_name_fx,ab_quantity,ab_select_product_flag',
-            '$filter' => "_ab_work_order_id_value eq {$workOrderId} and ab_quantity ge 1",
+            '$select' => 'ab_product_name_fx,ab_estimate_quantity,ab_select_product_flag',
+            '$filter' => "_ab_work_order_id_value eq {$workOrderId} and ab_estimate_quantity ge 1",
             '$expand' => 'ab_product_id($select=productnumber,name)',
         ], ttl: 60);
 
@@ -380,8 +380,8 @@ class DeviceService
         foreach (array_chunk($workOrderIds, 15) as $chunk) {
             $idFilter = implode(' or ', array_map(fn ($id) => "_ab_work_order_id_value eq {$id}", $chunk));
             $data = $this->api->get('ab_work_order_products', [
-                '$select' => 'ab_product_name_fx,ab_quantity,ab_select_product_flag,_ab_work_order_id_value',
-                '$filter' => "({$idFilter}) and ab_quantity ge 1",
+                '$select' => 'ab_product_name_fx,ab_estimate_quantity,ab_select_product_flag,_ab_work_order_id_value',
+                '$filter' => "({$idFilter}) and ab_estimate_quantity ge 1",
                 '$expand' => 'ab_product_id($select=productnumber,name)',
             ], ttl: 60);
 
@@ -409,7 +409,7 @@ class DeviceService
 
         return [
             'name'        => trim($r['ab_product_name_fx'] ?? ''),
-            'qty_needed'  => (float) ($r['ab_quantity'] ?? 0),
+            'qty_needed'  => (float) ($r['ab_estimate_quantity'] ?? 0),
             'is_write_in' => $isWriteIn,
             'item_number' => $itemNumber,
         ];
