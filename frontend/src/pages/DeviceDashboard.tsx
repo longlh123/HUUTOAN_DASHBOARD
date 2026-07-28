@@ -3,17 +3,16 @@ import {
   PieChart, Pie, Cell, Tooltip as PieTooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as BarTooltip, ResponsiveContainer,
 } from 'recharts'
-import type { DeviceProductLineData, AgreementOverview, AgreementItem, AlertRecord, MaintenanceScheduleData, MaintenanceScheduleItem, ServiceCenter, WorkOrderPartsData, WorkOrderPartsSummaryRow } from '../api/device'
-import { fetchDeviceByProductLine, fetchAgreementOverview, fetchAgreements, fetchMaintenanceSchedule, fetchServiceCenters, fetchWorkOrderParts, fetchWorkOrdersPartsSummary } from '../api/device'
+import type { DeviceProductLineData, AgreementOverview, AlertRecord, MaintenanceScheduleData, MaintenanceScheduleItem, ServiceCenter, WorkOrderPartsData, WorkOrderPartsSummaryRow, InventoryStockItem } from '../api/device'
+import { fetchDeviceByProductLine, fetchAgreementOverview, fetchMaintenanceSchedule, fetchServiceCenters, fetchWorkOrderParts, fetchWorkOrdersPartsSummary, fetchInventoryStockList } from '../api/device'
 import { getYearRange } from '../utils/date'
-import { fmtVND } from '../utils/format'
 
 /* ── constants ─────────────────────────────────────────────────────────── */
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS        = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR - i)
-const PAGE_SIZE    = 20
 const SUMMARY_PAGE_SIZE = 10
+const INVENTORY_SUMMARY_PAGE_SIZE = 20
 
 const PIE_COLORS = ['#C8102E', '#1e40af', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#be185d', '#6b7280']
 
@@ -24,15 +23,12 @@ const BAR_COLORS: Record<string, string> = {
   Lost:    '#dc2626',
 }
 
-const TYPES    = ['PM', 'WEL', 'Rental']
-const STATUSES = ['Active', 'Expired', 'Draft', 'Lost']
-
 const CRM_BASE = 'https://huutoan-test.crm5.dynamics.com'
 function crmUrl(entity: string, id: string): string {
   return `${CRM_BASE}/main.aspx?etn=${entity}&id=${encodeURIComponent(id)}&pagetype=entityrecord`
 }
 
-type Tab = 'overview' | 'list' | 'schedule' | 'centers'
+type Tab = 'overview' | 'schedule' | 'inventory' | 'centers'
 
 const CURRENT_QUARTER = Math.ceil((new Date().getMonth() + 1) / 3)
 const CURRENT_MONTH_IN_QUARTER = Math.min(2, Math.max(0, (new Date().getMonth() + 1) - (CURRENT_QUARTER - 1) * 3 - 1))
@@ -95,26 +91,6 @@ function cellDot(items: MaintenanceScheduleItem[]): string {
 }
 
 /* ── small helpers ──────────────────────────────────────────────────────── */
-
-function statusClass(s: string): string {
-  if (s === 'Active')  return 'win-rate win-rate--high'
-  if (s === 'Expired') return 'win-rate win-rate--low'
-  if (s === 'Draft')   return 'speed-badge speed-badge--mid'
-  if (s === 'Lost')    return 'win-rate win-rate--low'
-  return 'win-rate'
-}
-
-function ProgressCell({ actual, total }: { actual: number; total: number }) {
-  const pct = total > 0 ? Math.min(100, Math.round(actual / total * 100)) : 0
-  return (
-    <div className="bar-cell">
-      <div className="bar-track" style={{ flex: 1 }}>
-        <div className="bar-fill" style={{ width: `${pct}%` }} />
-      </div>
-      <span className="bar-pct">{actual}/{total}</span>
-    </div>
-  )
-}
 
 function PieLabel({ cx, cy, midAngle, outerRadius, pct, name }: {
   cx: number; cy: number; midAngle: number; outerRadius: number; pct: number; name: string
@@ -311,15 +287,14 @@ export function DeviceDashboard() {
   const [summaryWoSearch, setSummaryWoSearch] = useState('')
   const [summaryPage,       setSummaryPage]       = useState(1)
 
-  /* --- Tab 2: Agreement List --- */
-  const [typeFilter,   setTypeFilter]   = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [search,       setSearch]       = useState('')
-  const [listPage,     setListPage]     = useState(1)
-  const [agreements,   setAgreements]   = useState<AgreementItem[]>([])
-  const [listLoading,  setListLoading]  = useState(false)
-  const [listError,    setListError]    = useState<string | null>(null)
-  const [listVisited,  setListVisited]  = useState(false)
+  /* --- Tab: Inventory Stock List --- */
+  const [ inventoryData, setInventoryData ] = useState<InventoryStockItem[]>([]);
+  const [ inventoryLoading, setInventoryLoading ] = useState(false);
+  const [ inventoryError, setInventoryError ] = useState<string | null>(null);
+  const [ inventoryVisited, setInventoryVisited ] = useState(false);
+
+  const [ inventorySearch, setInventorySearch ] = useState('');
+  const [ inventoryPage, setInventoryPage ] = useState(1);
 
   /* --- Tab 4: Service Centers --- */
   const [centers,        setCenters]        = useState<ServiceCenter[]>([])
@@ -341,14 +316,6 @@ export function DeviceDashboard() {
   }, [])
 
   useEffect(() => {
-    if (tab !== 'list') return
-    if (!listVisited) setListVisited(true)
-    setListLoading(true); setListError(null); setListPage(1)
-    fetchAgreements(typeFilter || undefined, statusFilter || undefined)
-      .then(setAgreements).catch((e: Error) => setListError(e.message)).finally(() => setListLoading(false))
-  }, [tab, typeFilter, statusFilter])
-
-  useEffect(() => {
     if (tab !== 'schedule') return
     setSchedLoading(true); setSchedError(null)
     fetchMaintenanceSchedule(schedYear, schedQuarter)
@@ -365,6 +332,16 @@ export function DeviceDashboard() {
       .then(setCenters).catch((e: Error) => setCentersError(e.message)).finally(() => setCentersLoading(false))
   }, [tab])
 
+  useEffect(() => {
+    if(tab !== 'inventory' || inventoryVisited) return
+    setInventoryVisited(true)
+    setInventoryLoading(true); setInventoryError(null)
+    fetchInventoryStockList()
+      .then(setInventoryData)
+      .catch((e: Error) => setInventoryError(e.message))
+      .finally(() => setInventoryLoading(false))
+  }, [tab, inventoryVisited])
+
   function runSummarySearch() {
     setSummaryVisited(true)
     setSummaryLoading(true); setSummaryError(null)
@@ -380,19 +357,6 @@ export function DeviceDashboard() {
     runSummarySearch()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
-
-  /* --- Derived: agreements --- */
-  const filteredList = useMemo(() => {
-    if (!search.trim()) return agreements
-    const q = search.toLowerCase()
-    return agreements.filter(a =>
-      a.code.toLowerCase().includes(q) || a.device.toLowerCase().includes(q) || a.customer.toLowerCase().includes(q)
-    )
-  }, [agreements, search])
-
-  const totalPages = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE))
-  const safePage   = Math.min(listPage, totalPages)
-  const pageItems  = filteredList.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   /* --- Derived: schedule filters --- */
   const schedRegions = useMemo(() => {
@@ -487,6 +451,21 @@ export function DeviceDashboard() {
     summarySafePage * SUMMARY_PAGE_SIZE
   )
 
+  /* --- Derived: Inventory Stock List ---*/
+  const filteredInventory = useMemo(() => {
+    const q = inventorySearch.trim().toLocaleLowerCase()
+
+    if(!q) return inventoryData
+    return inventoryData.filter(r => (r.item_number.toLocaleLowerCase().includes(q) || r.name.toLocaleLowerCase().includes(q)))
+  }, [inventoryData, inventorySearch])
+
+  const inventoryTotalPages = Math.max(1, Math.ceil(filteredInventory.length / INVENTORY_SUMMARY_PAGE_SIZE))
+  const inventorySafePage   = Math.min(inventoryPage, inventoryTotalPages)
+  const inventoryPageItems  = filteredInventory.slice(
+    (inventorySafePage - 1) * INVENTORY_SUMMARY_PAGE_SIZE,
+    inventorySafePage * INVENTORY_SUMMARY_PAGE_SIZE
+  )
+
   const kpis = overview?.kpis
 
   return (
@@ -494,11 +473,11 @@ export function DeviceDashboard() {
       {/* ── Header ── */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div className="date-filter__presets">
-          {(['overview', 'list', 'schedule', 'centers'] as Tab[]).map((t, i) => (
+          {(['overview', 'schedule', 'inventory', 'centers'] as Tab[]).map((t, i) => (
             <button key={t}
               className={`date-filter__btn${tab === t ? ' date-filter__btn--active' : ''}`}
               onClick={() => setTab(t)}>
-              {['Tổng quan', 'Danh sách hợp đồng', 'Lịch KTV', 'Trạm BH'][i]}
+              {['Tổng quan', 'Lịch KTV', 'Kiểm kê kho', 'Trạm BH'][i]}
             </button>
           ))}
         </div>
@@ -620,89 +599,6 @@ export function DeviceDashboard() {
             </div>
           )}
         </>
-      )}
-
-      {/* ════════ TAB 2 — AGREEMENT LIST ════════ */}
-      {tab === 'list' && (
-        <div className="card" style={{ marginTop: '1.5rem', padding: '1.25rem' }}>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
-            <div className="date-filter__presets">
-              <button className={`date-filter__btn${typeFilter === '' ? ' date-filter__btn--active' : ''}`}
-                onClick={() => { setTypeFilter(''); setListPage(1) }}>Tất cả loại</button>
-              {TYPES.map(t => (
-                <button key={t}
-                  className={`date-filter__btn${typeFilter === t ? ' date-filter__btn--active' : ''}`}
-                  onClick={() => { setTypeFilter(t); setListPage(1) }}>{t}</button>
-              ))}
-            </div>
-            <div className="date-filter__presets">
-              <button className={`date-filter__btn${statusFilter === '' ? ' date-filter__btn--active' : ''}`}
-                onClick={() => { setStatusFilter(''); setListPage(1) }}>Tất cả trạng thái</button>
-              {STATUSES.map(s => (
-                <button key={s}
-                  className={`date-filter__btn${statusFilter === s ? ' date-filter__btn--active' : ''}`}
-                  onClick={() => { setStatusFilter(s); setListPage(1) }}>{s}</button>
-              ))}
-            </div>
-            <input type="text" placeholder="Tìm mã HĐ / thiết bị / khách hàng…"
-              value={search} onChange={e => { setSearch(e.target.value); setListPage(1) }}
-              style={{ flex: '1 1 240px', padding: '6px 12px', fontSize: 13,
-                border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
-            <span style={{ color: 'var(--text-muted)', fontSize: 13, whiteSpace: 'nowrap' }}>
-              {filteredList.length} kết quả
-            </span>
-          </div>
-
-          {listLoading && <p style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>Đang tải…</p>}
-          {listError   && <p style={{ textAlign: 'center', padding: '40px 0', color: '#ea580c' }}>{listError}</p>}
-          {!listLoading && !listError && (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px' }}>Mã HĐ</th>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px' }}>Thiết bị</th>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px' }}>Khách hàng</th>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px' }}>Loại</th>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px' }}>Trạng thái</th>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px', minWidth: 140 }}>Tiến độ BT</th>
-                      <th style={{ textAlign: 'right', padding: '8px 10px' }}>Giá trị</th>
-                      <th style={{ textAlign: 'left',  padding: '8px 10px' }}>Team</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageItems.length === 0 && (
-                      <tr><td colSpan={8} style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>Không có dữ liệu</td></tr>
-                    )}
-                    {pageItems.map(a => (
-                      <tr key={a.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '8px 10px', fontWeight: 500 }}>
-                          <a href={crmUrl('ab_agreement_device', a.id)} target="_blank" rel="noreferrer"
-                             style={{ color: 'var(--accent)', textDecoration: 'none' }}>{a.code}</a>
-                        </td>
-                        <td style={{ padding: '8px 10px', color: 'var(--text-muted)' }}>{a.device || '—'}</td>
-                        <td style={{ padding: '8px 10px' }}>{a.customer || '—'}</td>
-                        <td style={{ padding: '8px 10px' }}>{a.type}</td>
-                        <td style={{ padding: '8px 10px' }}><span className={statusClass(a.status)}>{a.status}</span></td>
-                        <td style={{ padding: '8px 10px' }}><ProgressCell actual={a.actual_times} total={a.total_times} /></td>
-                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{a.value > 0 ? fmtVND(a.value) : '—'}</td>
-                        <td style={{ padding: '8px 10px', fontSize: 12, color: 'var(--text-muted)' }}>{a.team}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: '1.25rem' }}>
-                  <button className="date-filter__btn" disabled={safePage <= 1} onClick={() => setListPage(p => p - 1)}>← Trước</button>
-                  <span style={{ lineHeight: '32px', fontSize: 13 }}>Trang {safePage} / {totalPages}</span>
-                  <button className="date-filter__btn" disabled={safePage >= totalPages} onClick={() => setListPage(p => p + 1)}>Tiếp →</button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
       )}
 
       {/* ════════ TAB 3 — MAINTENANCE SCHEDULE ════════ */}
@@ -1057,6 +953,61 @@ export function DeviceDashboard() {
             )}
           </div>
         </>
+      )}
+
+      {/* ════════ TAB — KIỂM KÊ KHO ════════ */}
+      {tab === 'inventory' && (
+        <div className="card" style={{ marginTop: '1.5rem', padding: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+            <h2 className="card__title" style={{ margin: 0 }}>Kiểm kê kho</h2>
+            <input type="text" placeholder="Tìm mã, tên vật tư…"
+              value={inventorySearch}
+              onChange={e => { setInventorySearch(e.target.value); setInventoryPage(1) }}
+              style={{ flex: '1 1 180px', padding: '6px 12px', fontSize: 13,
+                border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)', color: 'var(--text)' }} />
+          </div>
+          {inventoryLoading && <p style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>Đang tải...</p>}
+          {inventoryError   && <p style={{ textAlign: 'center', padding: '40px 0', color: '#ea580c' }}>{inventoryError}</p>}
+          {!inventoryLoading && !inventoryError && (
+            <>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+                {filteredInventory.length} vật tư
+              </p>
+              <div style={{ overflowX: 'auto' }}>
+                <table>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                      <th style={{ textAlign: 'left', padding: '6px 10px' }}>Mã vật tư</th>
+                      <th style={{ textAlign: 'right', padding: '6px 10px' }}>Tên vật tư</th>
+                      <th style={{ textAlign: 'right', padding: '6px 10px' }}>Tồn kho</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInventory.length === 0 && (
+                      <tr><td colSpan={2} style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)' }}>Không có vật tư nào</td></tr>
+                    )}
+                    {inventoryPageItems.map(row => (
+                      <tr key={row.item_number} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'top' }}>
+                        <td style={{ padding: '8px 10px' }}>{row.item_number}</td>
+                        <td style={{ padding: '8px 10px' }}>{row.name}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'right' }}>{row.stock_qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {inventoryTotalPages > 1 && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: '1.25rem' }}>
+                    <button className="date-filter__btn" disabled={inventorySafePage <= 1}
+                      onClick={() => setInventoryPage(p => p - 1)}>← Trước</button>
+                    <span style={{ lineHeight: '32px', fontSize: 13 }}>Trang {inventorySafePage} / {inventoryTotalPages}</span>
+                    <button className="date-filter__btn" disabled={inventorySafePage >= inventoryTotalPages}
+                      onClick={() => setInventoryPage(p => p + 1)}>Tiếp →</button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
 
       {/* ════════ TAB 4 — SERVICE CENTERS ════════ */}

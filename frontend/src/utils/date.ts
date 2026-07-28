@@ -35,10 +35,7 @@ export function getMonthRange(year: number, month: number): DateRange {
 
 export function prevYearRange(range: DateRange): DateRange {
   const y = parseInt(range.from.slice(0, 4)) - 1
-  return {
-    from: range.from.replace(/^\d{4}/, String(y)),
-    to:   range.to.replace(/^\d{4}/, String(y)),
-  }
+  return { from: `${y}-01-01`, to: `${y}-12-31` }
 }
 
 // Dùng cho initial state trong SalesDashboard

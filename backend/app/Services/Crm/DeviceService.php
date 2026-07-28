@@ -457,6 +457,53 @@ class DeviceService
         return $byItem;
     }
 
+    public function inventoryStockList(): array
+    {
+        $data = cache()->remember('erp:inventory_stock_list', 300, fn() => 
+             $this->erp->getAll('ABInventWarehousesOnHandV2', [
+                '$select' => 'ItemNumber,OnHandQuantity',
+            ])
+        );
+
+        $byItem = [];
+        foreach($data as $row) {
+            $item = $row['ItemNumber'] ?? '';
+            $byItem[$item] = ($byItem[$item] ?? 0.0) + (float)($row['OnHandQuantity'] ?? 0);
+        }
+
+        $names = $this->fetchItemNames();
+
+        $list = [];
+
+        foreach($byItem as $itemNumber => $qty){
+            $list[] = [
+                'item_number' => (string)$itemNumber, 
+                'name' => $names[$itemNumber] ?? (string)$itemNumber,
+                'stock_qty' => $qty
+            ];
+        }
+
+        usort($list, fn($a, $b) => $a['item_number'] <=> $b['item_number']);
+
+        return $list;
+    }
+
+    private function fetchItemNames(): array
+    {
+        $all = cache()->remember('erp:released_products', 3600, fn() =>
+            $this->erp->getAll('ReleasedProductsV2', [
+                '$select' => 'ItemNumber,SearchName'
+            ])
+        );
+
+        $names = [];
+        foreach($all as $p){
+            $names[$p['ItemNumber']] = $p['SearchName'] ?? $p['ItemNumber'];
+        }
+
+        return $names;
+    }
+
     public function serviceCenters(): array
     {
         $data = $this->api->get('msdyn_organizationalunits', [

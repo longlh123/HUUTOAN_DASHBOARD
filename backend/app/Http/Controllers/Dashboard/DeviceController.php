@@ -63,4 +63,9 @@ class DeviceController extends Controller
 
         return $this->success($this->devices->workOrdersPartsSummary($from, $to));
     }
+
+    public function inventoryStockList(): JsonResponse
+    {
+        return $this->success($this->devices->inventoryStockList());
+    }
 }

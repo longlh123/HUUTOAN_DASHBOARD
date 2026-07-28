@@ -158,6 +158,15 @@ export type ServiceCenter = {
 export const fetchServiceCenters = () =>
   apiFetch<ServiceCenter[]>(`${BASE}/service-centers`)
 
+export type InventoryStockItem = {
+  item_number: string,
+  name: string,
+  stock_qty: number
+}
+
+export const fetchInventoryStockList = () => 
+  apiFetch<InventoryStockItem[]>(`${BASE}/inventory-stock-list`)
+
 export type WorkOrderPart = {
   item_number:  string | null
   name:         string

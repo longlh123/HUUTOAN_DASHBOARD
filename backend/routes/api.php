@@ -80,6 +80,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/devices/agreements',              [DeviceController::class, 'agreements']);
         Route::get('/devices/maintenance-schedule',    [DeviceController::class, 'maintenanceSchedule']);
         Route::get('/devices/service-centers',         [DeviceController::class, 'serviceCenters']);
+        Route::get('/devices/inventory-stock-list',    [DeviceController::class, 'inventoryStockList']);
         Route::get('/devices/work-orders/{id}/parts',  [DeviceController::class, 'workOrderParts']);
         Route::get('/devices/work-orders/parts-summary', [DeviceController::class, 'workOrdersPartsSummary']);
         Route::get('/opportunities/pipeline', [OpportunitiesController::class, 'pipeline']);
