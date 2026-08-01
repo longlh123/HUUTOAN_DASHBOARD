@@ -4,6 +4,7 @@ namespace App\Services\Crm;
 
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 
 class SalesPerformanceService
 {
@@ -408,19 +409,32 @@ class SalesPerformanceService
     // ab_line_ut_amount = 0 nếu quote không có SF → kết quả tương đương totalamount
     private function resolveQuoteValues(Collection $quotes, int $ttl = 1800): Collection
     {
-        $detailsByQuote = $this->fetchQuoteDetails(
-            $quotes->pluck('quoteid')->filter()->values()->all(),
-            $ttl
+        $quoteIds = $quotes->pluck('quoteid')->filter()->values()->sort()->values()->all();
+        if (empty($quoteIds)) return $quotes;
+
+        // Cache theo dung bo quoteId (khong phai theo tung chunk rieng le) — byPeriod/byRep/byTeam
+        // cung mot khoang ngay se ra cung mot bo quoteId, gop lai 1 cache entry duy nhat thay vi
+        // moi method tu chunk lai tu dau, tranh lap lai toan bo vong lap goi CRM.
+        $cacheKey = 'crm:quote_values:' . md5(implode(',', $quoteIds));
+
+        // Lock tranh 2 request cung luc deu cache-miss roi tu sweep CRM song song (da gap thuc te:
+        // by-team + by-rep ban dong thoi, ca 2 deu mat ~37s vi khong request nao kip ghi cache
+        // truoc khi request kia doc). Request den sau se doi request dau ghi xong cache roi doc
+        // lai, khong tu fetch CRM lan nua.
+        $valueByQuote = Cache::lock("lock:{$cacheKey}", 120)->block(120, fn () =>
+            cache()->remember($cacheKey, $ttl, function () use ($quoteIds, $ttl) {
+                $detailsByQuote = $this->fetchQuoteDetails($quoteIds, $ttl);
+
+                return $detailsByQuote->map(fn ($lines) => $lines->sum(fn ($l) =>
+                    (float) ($l['ab_total_amount_plus_ut_no_tax_calculated'] ?? 0)
+                    - (float) ($l['ab_line_ut_amount'] ?? 0)
+                ))->all();
+            })
         );
 
-        return $quotes->map(function ($quote) use ($detailsByQuote) {
-            $lines = $detailsByQuote->get($quote['quoteid'] ?? '', collect());
-            $value = $lines->sum(fn ($l) =>
-                (float) ($l['ab_total_amount_plus_ut_no_tax_calculated'] ?? 0)
-                - (float) ($l['ab_line_ut_amount'] ?? 0)
-            );
-            return array_merge($quote, ['resolved_value' => $value]);
-        });
+        return $quotes->map(fn ($quote) => array_merge($quote, [
+            'resolved_value' => $valueByQuote[$quote['quoteid'] ?? ''] ?? 0.0,
+        ]));
     }
 
     private function fetchQuoteDetails(array $quoteIds, int $ttl = 1800): Collection
@@ -428,7 +442,7 @@ class SalesPerformanceService
         if (empty($quoteIds)) return collect();
 
         $all = collect();
-        foreach (array_chunk($quoteIds, 15) as $chunk) {
+        foreach (array_chunk($quoteIds, 20) as $chunk) {
             $filter = implode(' or ', array_map(
                 fn ($id) => "_quoteid_value eq $id",
                 $chunk
