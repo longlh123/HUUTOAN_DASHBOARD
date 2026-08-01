@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import type { TeamData, DateRange } from '../api/sales'
 import { fetchByTeam } from '../api/sales'
 import { fmtVNDFull } from '../utils/format'
@@ -84,7 +84,7 @@ export function SalesTeamLeaderboard({ territory, department, range }: Props) {
             </thead>
             <tbody>
               {grouped.map(([dept, teams]) => (
-                <>
+                <Fragment key={dept}>
                   <tr key={`dept-${dept}`} className="leaderboard__dept-header">
                     <td colSpan={9}>{dept || 'Khac'}</td>
                   </tr>
@@ -130,7 +130,7 @@ export function SalesTeamLeaderboard({ territory, department, range }: Props) {
                       </tr>
                     )
                   })}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

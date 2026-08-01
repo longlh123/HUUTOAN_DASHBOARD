@@ -70,6 +70,12 @@ function periodTargets(count: number, qt: KpiQuarterly, groupBy: GroupBy): numbe
   return Array.from({ length: count }, () => annual / count)
 }
 
+function pctColor(pct: number): string {
+  if (pct >= 100) return '#16a34a'
+  if (pct >= 70)  return '#ca8a04'
+  return '#dc2626'
+}
+
 function applyRollingTarget(
   data:         MergedPoint[],
   qt:           KpiQuarterly,
@@ -86,6 +92,35 @@ export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTarget
 
   const merged = hasKpi ? applyRollingTarget(base, quarterlyTargets, groupBy) : base
 
+  // Label riêng cho bar "Năm nay" — dòng giá trị + dòng % target (màu theo ngưỡng đạt/chưa đạt),
+  // chỉ hiện % khi có KPI target cho kỳ đó.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const renderCurrentLabel = (props: any) => {
+    const x = Number(props.x ?? 0)
+    const y = Number(props.y ?? 0)
+    const width = Number(props.width ?? 0)
+    const index = props.index ?? 0
+    const v = Number(props.value)
+    if (v === 0) return null
+
+    const cx  = x + width / 2
+    const d   = merged[index]
+    const pct = hasKpi && d?.target ? Math.round(v / d.target * 100) : null
+
+    return (
+      <g>
+        <text x={cx} y={y - (pct !== null ? 14 : 4)} textAnchor="middle" fontSize={10} fill="var(--text)">
+          {fmtAxisVND(v)}
+        </text>
+        {pct !== null && (
+          <text x={cx} y={y - 2} textAnchor="middle" fontSize={10} fontWeight={700} fill={pctColor(pct)}>
+            {pct}%
+          </text>
+        )}
+      </g>
+    )
+  }
+
   return (
     <div className="card">
       <h2 className="card__title">{title}</h2>
@@ -95,7 +130,7 @@ export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTarget
           <p className="chart-empty">Không có dữ liệu trong kỳ này</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={merged} margin={{ top: 28, right: 8, left: 0, bottom: 0 }} barGap={3} barCategoryGap="30%">
+            <ComposedChart data={merged} margin={{ top: 40, right: 8, left: 0, bottom: 0 }} barGap={3} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
               <XAxis
                 dataKey="label"
@@ -111,14 +146,31 @@ export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTarget
                 width={64}
               />
               <Tooltip
-                formatter={(value: unknown) => fmtVND(Number(value))}
-                labelStyle={{ color: 'var(--text-h)', fontWeight: 600 }}
-                contentStyle={{
-                  background: 'var(--bg)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  boxShadow: 'var(--shadow)',
+                content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const d = payload[0].payload as MergedPoint
+                  const pct = hasKpi && d.target ? Math.round(d.current / d.target * 100) : null
+
+                  return (
+                    <div style={{
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      boxShadow: 'var(--shadow)',
+                    }}>
+                      <p style={{ color: 'var(--text-h)', fontWeight: 600, margin: '0 0 4px' }}>{label}</p>
+                      {d.target !== undefined && (
+                        <p style={{ margin: '2px 0', color: '#f59e0b' }}>KPI: {fmtVND(d.target)}</p>
+                      )}
+                      <p style={{ margin: '2px 0', color: 'var(--accent)' }}>Năm nay: {fmtVND(d.current)}</p>
+                      <p style={{ margin: '2px 0', color: '#94a3b8' }}>Năm ngoái: {fmtVND(d.prev)}</p>
+                      {pct !== null && (
+                        <p style={{ margin: '4px 0 0', fontWeight: 700, color: pctColor(pct) }}>{pct}% target</p>
+                      )}
+                    </div>
+                  )
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
@@ -131,12 +183,7 @@ export function RevenueChart({ data, prevData, loading, groupBy, quarterlyTarget
                 />
               </Bar>
               <Bar dataKey="current" name="Năm nay" fill="var(--accent)" radius={[4, 4, 0, 0]} maxBarSize={52}>
-                <LabelList
-                  dataKey="current"
-                  position="top"
-                  formatter={(v: unknown) => Number(v) === 0 ? '' : fmtAxisVND(Number(v))}
-                  style={{ fontSize: 10, fill: 'var(--text)' }}
-                />
+                <LabelList dataKey="current" position="top" content={renderCurrentLabel} />
               </Bar>
               {hasKpi && (
                 <Line

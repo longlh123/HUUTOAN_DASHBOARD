@@ -8,7 +8,7 @@ const COLORS = ['#C8102E', '#3b82f6', '#0d9488', '#f97316', '#8b5cf6', '#ec4899'
 type DeptItem = { name: string; actual: number; target: number; fill: string }
 type PieItem  = { name: string; value: number; fill: string; pct?: number }
 
-type Props = { data: TeamData[]; loading: boolean }
+type Props = { data: TeamData[]; loading: boolean; department?: string }
 
 function pctColor(pct: number): string {
   if (pct >= 100) return '#16a34a'
@@ -16,11 +16,13 @@ function pctColor(pct: number): string {
   return '#dc2626'
 }
 
-export function TeamTargetChart({ data, loading }: Props) {
+export function TeamTargetChart({ data, loading, department }: Props) {
+  // Khi đã lọc theo 1 department cụ thể, mọi dòng đều cùng department nên group theo
+  // department không còn ý nghĩa — group theo team (business unit) bên trong department đó.
   const depts = useMemo((): DeptItem[] => {
     const map = new Map<string, { name: string; actual: number; target: number }>()
     data.forEach(t => {
-      const key = t.department || 'Khác'
+      const key = department ? (t.name || 'Khác') : (t.department || 'Khác')
       const d   = map.get(key) ?? { name: key, actual: 0, target: 0 }
       d.actual += t.total_value
       d.target += t.kpi ?? 0
@@ -30,7 +32,7 @@ export function TeamTargetChart({ data, loading }: Props) {
       .filter(d => d.actual > 0 || d.target > 0)
       .sort((a, b) => b.actual - a.actual)
       .map((d, i) => ({ ...d, fill: COLORS[i % COLORS.length] }))
-  }, [data])
+  }, [data, department])
 
   const totalActual = depts.reduce((s, d) => s + d.actual, 0)
   const totalTarget = depts.reduce((s, d) => s + d.target, 0)
@@ -57,12 +59,17 @@ export function TeamTargetChart({ data, loading }: Props) {
   return (
     <div className="card">
       <div className="chart-header">
-        <p className="card__title">Department vs. Target năm</p>
+        <p className="card__title">{department ? 'Team vs. Target năm' : 'Department vs. Target năm'}</p>
         {!loading && overallPct !== null && (
-          <p style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-h)', margin: 0 }}>
-            <span style={{ color: pctColor(overallPct) }}>{overallPct}%</span>
-            <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text)', marginLeft: 6 }}>target</span>
-          </p>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-h)', margin: 0 }}>
+              <span style={{ color: pctColor(overallPct) }}>{overallPct}%</span>
+              <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text)', marginLeft: 6 }}>target</span>
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              {fmtVND(totalActual)} / {fmtVND(totalTarget)}
+            </p>
+          </div>
         )}
       </div>
 
@@ -111,7 +118,7 @@ export function TeamTargetChart({ data, loading }: Props) {
           <div style={{
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: '10px auto auto auto',
+            gridTemplateColumns: '10px minmax(120px, 1fr) auto auto',
             columnGap: 8,
             rowGap: 7,
             alignContent: 'flex-start',
@@ -119,11 +126,13 @@ export function TeamTargetChart({ data, loading }: Props) {
             fontSize: 12,
           }}>
             {depts.map((d, i) => {
-              const pct = totalTarget > 0 ? Math.round(d.actual / totalTarget * 100) : null
+              // % o day la ty trong dong gop trong TONG THUC TE (100%), khac voi %
+              // hien o goc tren ben phai la % dat TARGET tong the (vd 48%)
+              const pct = totalActual > 0 ? Math.round(d.actual / totalActual * 100) : null
               return (
                 <Fragment key={d.name}>
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: COLORS[i % COLORS.length], display: 'inline-block', alignSelf: 'center' }} />
-                  <span style={{ color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                  <span title={d.name} style={{ color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
                   <span style={{ color: 'var(--text)', textAlign: 'right', whiteSpace: 'nowrap' }}>{fmtVND(d.actual)}</span>
                   <span style={{ fontWeight: 700, color: 'var(--text-h)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                     {pct !== null ? `${pct}%` : ''}

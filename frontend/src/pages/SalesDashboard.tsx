@@ -10,7 +10,6 @@ import { DateRangeFilter } from '../components/DateRangeFilter'
 import { PipelineHealth } from '../components/PipelineHealth'
 import { OppQualityTable } from '../components/OppQualityTable'
 import { OppQualityDetailTable } from '../components/OppQualityDetailTable'
-import { TerritoryFilter } from '../components/TerritoryFilter'
 import { WeeklyWonChart } from '../components/WeeklyWonChart'
 import { TeamTargetChart } from '../components/TeamTargetChart'
 import { TopAccountsTable } from '../components/TopAccountsTable'
@@ -27,7 +26,7 @@ export function SalesDashboard() {
   const [activeTab,    setActiveTab]    = useState<Tab>('performance')
   const [range,        setRange]        = useState<DateRange>(getPresetRange('year'))
   const [groupBy,      setGroupBy]      = useState<GroupBy>('quarter')
-  const [territory,    setTerritory]    = useState<Territory>(
+  const [territory] = useState<Territory>(
     !isAdmin && user?.territory ? user.territory as Territory : 'ALL'
   )
   const [department,   setDepartment]   = useState<string | undefined>(undefined)
@@ -174,7 +173,6 @@ export function SalesDashboard() {
               ))}
             </div>
           )}
-          <TerritoryFilter value={territory} onChange={setTerritory} disabled={!isAdmin} />
         </div>
       </div>
 
@@ -190,7 +188,7 @@ export function SalesDashboard() {
           <RevenueChart data={periodData} prevData={prevPeriodData} loading={loading} groupBy={groupBy} quarterlyTargets={kpiQuarterly ?? undefined} />
           <div className="row-2col">
             <WeeklyWonChart territory={territory} department={department} />
-            <TeamTargetChart data={teamData} loading={loading} />
+            <TeamTargetChart data={teamData} loading={loading} department={department} />
           </div>
           <SalesTeamLeaderboard territory={territory} department={department} range={range} />
           <SalesLeaderboard territory={territory} department={department} range={range} />
