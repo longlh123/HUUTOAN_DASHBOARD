@@ -339,6 +339,65 @@ class SalesPerformanceService
             ->all();
     }
 
+    /**
+     * Danh sach tung deal (Won quote, da dedup theo opportunity giong cach tinh byRep/byPeriod)
+     * trong 1 khoang ngay — dung de doi chieu voi so lieu tu theo doi thu cong cua team.
+     * Kem theo so_number (Sales Order) neu quote da duoc convert sang SO — khong phai quote nao
+     * cung co SO ngay, mot so deal Won van chua duoc tao SO tai thoi diem query.
+     *
+     * @return Collection<int, array{quote_number: ?string, so_number: ?string, name: ?string, owner: string, team: string, closedon: ?string, createdon: ?string, value: float}>
+     */
+    public function dealList(Carbon $from, Carbon $to, ?string $territory = null, ?string $department = null): Collection
+    {
+        $wonQuotes = $this->resolveQuoteValues(
+            $this->filterByTerritory($this->filterByDepartment($this->fetchWonQuotes($from, $to), $department), $territory),
+            $this->ttlFor($to)
+        );
+
+        $oppRows = $this->calcOppValue($wonQuotes);
+
+        $quoteIds  = $oppRows->pluck('quoteid')->filter()->unique()->values()->all();
+        $soByQuote = $this->fetchSalesOrderNumbers($quoteIds);
+
+        return $oppRows
+            ->map(fn ($q) => [
+                'quote_number' => $q['quotenumber'] ?? null,
+                'so_number'    => $soByQuote[$q['quoteid'] ?? ''] ?? null,
+                'name'         => $q['name'] ?? null,
+                'owner'        => $q['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
+                'team'         => $q['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+                'closedon'     => $q['closedon'] ?? null,
+                'createdon'    => $q['createdon'] ?? null,
+                'value'        => (float) $q['resolved_value'],
+            ])
+            ->sortBy('closedon')
+            ->values();
+    }
+
+    // Map quoteId => ordernumber (SO) — khong phai quote nao cung co SO, chi convert khi co ket qua
+    private function fetchSalesOrderNumbers(array $quoteIds): array
+    {
+        if (empty($quoteIds)) return [];
+
+        $byQuote = [];
+        foreach (array_chunk($quoteIds, 20) as $chunk) {
+            $filter = implode(' or ', array_map(fn ($id) => "_quoteid_value eq $id", $chunk));
+            $data   = $this->api->get('salesorders', [
+                '$select' => 'ordernumber,_quoteid_value',
+                '$filter' => $filter,
+            ], ttl: 1800);
+
+            foreach ($data['value'] ?? [] as $so) {
+                $qid = $so['_quoteid_value'] ?? '';
+                if ($qid && !isset($byQuote[$qid])) {
+                    $byQuote[$qid] = $so['ordernumber'] ?? null;
+                }
+            }
+        }
+
+        return $byQuote;
+    }
+
     public function weeklyDeals(int $weekOffset = 0, ?string $territory = null, ?string $department = null): array
     {
         $monday = now()->startOfWeek(Carbon::MONDAY)->addWeeks($weekOffset)->startOfDay();
@@ -377,7 +436,7 @@ class SalesPerformanceService
     private function fetchWonQuotes(Carbon $from, Carbon $to): Collection
     {
         $data = $this->api->get('quotes', [
-            '$select'  => 'quoteid,closedon,createdon,ab_request_type_code,_ownerid_value,_owningbusinessunit_value,_opportunityid_value,_customerid_value',
+            '$select'  => 'quoteid,quotenumber,name,closedon,createdon,ab_request_type_code,_ownerid_value,_owningbusinessunit_value,_opportunityid_value,_customerid_value',
             '$filter'  => implode(' and ', [
                 'statecode eq 2',
                 "closedon ge {$from->copy()->startOfDay()->utc()->toIso8601String()}",
@@ -992,11 +1051,12 @@ class SalesPerformanceService
     public function users(): Collection
     {
         return $this->fetchUsers()
-            ->filter(fn ($u) =>
-                !empty($u['_ab_dim_territory_id_value']) &&
-                !empty($u['_ab_dim_department_id_value']) &&
-                !empty($u['_businessunitid_value'])
-            )
+            ->filter(function ($u) {
+                $team = $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] ?? '';
+                return $team !== ''
+                    && !in_array($team, self::GENERIC_BUSINESS_UNITS)
+                    && !str_starts_with(strtolower($u['fullname'] ?? ''), 'tester');
+            })
             ->map(fn ($u) => [
                 'id'         => $u['systemuserid'],
                 'name'       => $u['fullname'] ?? '',
@@ -1030,6 +1090,9 @@ class SalesPerformanceService
         ];
     }
 
+    // BU cua to chuc/root, khong phai team thuc - loai khoi danh sach nhan vien de tranh nhieu
+    private const GENERIC_BUSINESS_UNITS = ['huutoan', 'Công ty TNHH Hữu Toàn Group'];
+
     public function allUsers(): Collection
     {
         $data = $this->api->get('systemusers', $this->allUsersParams(), ttl: 3600);
@@ -1037,8 +1100,9 @@ class SalesPerformanceService
         return collect($data['value'] ?? [])
             ->filter(fn ($u) =>
                 str_ends_with(strtolower($u['internalemailaddress'] ?? ''), '@huutoan.com') &&
-                !empty($u['_ab_dim_department_id_value']) &&
-                !empty($u['_ab_dim_territory_id_value'])
+                !empty($u['businessunitid']['name']) &&
+                !in_array($u['businessunitid']['name'], self::GENERIC_BUSINESS_UNITS) &&
+                !str_starts_with(strtolower($u['fullname'] ?? ''), 'tester')
             )
             ->map(fn ($u) => [
                 'id'              => $u['systemuserid'],
@@ -1085,6 +1149,7 @@ class SalesPerformanceService
         if (!empty($body)) {
             $this->api->patch('systemusers', $userId, $body);
             $this->api->forget('systemusers', $this->allUsersParams());
+            $this->api->forget('systemusers', $this->fetchUsersParams());
         }
     }
 
@@ -1447,13 +1512,18 @@ class SalesPerformanceService
     }
 
     // Lấy danh sách user, keyed theo systemuserid — dùng để map owner_id → territory/department/cost_center
-    private function fetchUsers(): Collection
+    private function fetchUsersParams(): array
     {
-        $data = $this->api->get('systemusers', [
+        return [
             '$select' => 'fullname,systemuserid,title,_ab_dim_territory_id_value,_ab_dim_cost_center_id_value,_ab_dim_department_id_value,_businessunitid_value',
             '$filter' => 'azurestate eq 0 and deletedstate eq 0',
             '$top'    => '1000',
-        ], ttl: 3600);
+        ];
+    }
+
+    private function fetchUsers(): Collection
+    {
+        $data = $this->api->get('systemusers', $this->fetchUsersParams(), ttl: 3600);
 
         return collect($data['value'] ?? [])->keyBy('systemuserid');
     }

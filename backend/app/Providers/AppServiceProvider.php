@@ -12,6 +12,7 @@ use App\Services\Erp\CostService;
 use App\Services\Erp\ErpApiService;
 use App\Services\Erp\ErpTokenService;
 use App\Services\Erp\FinanceService;
+use App\Services\Invoice\InvoiceImportService;
 use SocialiteProviders\Manager\SocialiteWasCalled;
 use SocialiteProviders\Azure\AzureExtendSocialite;
 
@@ -30,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ErpApiService::class);
         $this->app->singleton(FinanceService::class);
         $this->app->singleton(CostService::class);
+        $this->app->singleton(InvoiceImportService::class);
     }
 
     /**

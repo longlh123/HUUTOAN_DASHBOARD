@@ -81,6 +81,14 @@ class SalesController extends Controller
         return $this->success($this->sales->byTeam($from, $to, $request->query('territory'), $request->query('department')));
     }
 
+    // Danh sach tung deal (da dedup theo opportunity) — dung de doi chieu voi so lieu theo doi thu cong
+    public function deals(Request $request): JsonResponse
+    {
+        [$from, $to] = $this->parseDateRange($request);
+
+        return $this->success($this->sales->dealList($from, $to, $request->query('territory'), $request->query('department')));
+    }
+
     public function topAccounts(Request $request): JsonResponse
     {
         [$from, $to] = $this->parseDateRange($request);

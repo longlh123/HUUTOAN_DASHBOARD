@@ -176,54 +176,60 @@ export function UsersPage() {
           <p className="table-placeholder">Không tìm thấy nhân viên nào.</p>
         ) : (
           <>
-            <table className="leaderboard">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Họ tên</th>
-                  <th>Title</th>
-                  <th>Email</th>
-                  <th>Mobile</th>
-                  <th style={{ textAlign: 'center' }}>D365 Status</th>
-                  <th style={{ textAlign: 'center' }}>Azure Status</th>
-                  <th>Business Unit</th>
-                  <th>F4 Cost Center</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((u, i) => (
-                  <tr key={u.id}>
-                    <td className="leaderboard__rank">{(currentPage - 1) * PAGE_SIZE + i + 1}</td>
-                    <td className="leaderboard__name">{u.full_name || '—'}</td>
-                    <td>{u.title || '—'}</td>
-                    <td>{u.email || '—'}</td>
-                    <td>{u.mobile || '—'}</td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className={`win-rate ${u.is_disabled ? 'win-rate--low' : 'win-rate--high'}`}>
-                        {u.is_disabled ? 'Disabled' : 'Active'}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'center' }}>
-                      <span className={`win-rate ${u.azure_state === 0 ? 'win-rate--high' : 'win-rate--low'}`}>
-                        {u.azure_state === 0 ? 'Active' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td>{u.business_unit || '—'}</td>
-                    <td>{u.cost_center || '—'}</td>
-                    <td>
-                      <button
-                        className="leaderboard__page-btn"
-                        style={{ fontSize: 13, padding: '2px 10px' }}
-                        onClick={() => openEdit(u)}
-                      >
-                        Sửa
-                      </button>
-                    </td>
+            <div className="table-wrap">
+              <table className="leaderboard">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Họ tên</th>
+                    <th>Title</th>
+                    <th>Email</th>
+                    <th>Mobile</th>
+                    <th style={{ textAlign: 'center' }}>D365 Status</th>
+                    <th style={{ textAlign: 'center' }}>Azure Status</th>
+                    <th>Business Unit</th>
+                    <th>F3 Phòng ban</th>
+                    <th>F5 Vùng</th>
+                    <th>F4 Cost Center</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {rows.map((u, i) => (
+                    <tr key={u.id}>
+                      <td className="leaderboard__rank">{(currentPage - 1) * PAGE_SIZE + i + 1}</td>
+                      <td className="leaderboard__name">{u.full_name || '—'}</td>
+                      <td>{u.title || '—'}</td>
+                      <td>{u.email || '—'}</td>
+                      <td>{u.mobile || '—'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`win-rate ${u.is_disabled ? 'win-rate--low' : 'win-rate--high'}`}>
+                          {u.is_disabled ? 'Disabled' : 'Active'}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <span className={`win-rate ${u.azure_state === 0 ? 'win-rate--high' : 'win-rate--low'}`}>
+                          {u.azure_state === 0 ? 'Active' : 'Disabled'}
+                        </span>
+                      </td>
+                      <td>{u.business_unit || '—'}</td>
+                      <td>{u.department || <span style={{ color: '#ea580c' }}>Thiếu</span>}</td>
+                      <td>{u.territory || <span style={{ color: '#ea580c' }}>Thiếu</span>}</td>
+                      <td>{u.cost_center || '—'}</td>
+                      <td>
+                        <button
+                          className="leaderboard__page-btn"
+                          style={{ fontSize: 13, padding: '2px 10px' }}
+                          onClick={() => openEdit(u)}
+                        >
+                          Sửa
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {totalPages > 1 && (
               <div className="leaderboard__pagination">

@@ -10,6 +10,7 @@ use App\Http\Controllers\Dashboard\KpiController;
 use App\Http\Controllers\Dashboard\DeviceController;
 use App\Http\Controllers\Dashboard\UsersController;
 use App\Http\Controllers\Dashboard\FinanceController;
+use App\Http\Controllers\Dashboard\InvoiceController;
 
 // Azure AD OAuth — web middleware cần thiết cho session (OAuth state)
 Route::middleware('web')->prefix('auth/azure')->group(function () {
@@ -74,6 +75,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/sales/by-period',        [SalesController::class,        'byPeriod']);
         Route::get('/sales/by-rep',           [SalesController::class,        'byRep']);
         Route::get('/sales/by-team',          [SalesController::class,        'byTeam']);
+        Route::get('/sales/deals',            [SalesController::class,        'deals']);
         Route::get('/sales/request-type',     [SalesController::class,         'requestTypeCrosstab']);
         Route::get('/devices/by-product-line',    [DeviceController::class, 'byProductLine']);
         Route::get('/devices/agreement-overview', [DeviceController::class, 'agreementOverview']);
@@ -99,6 +101,10 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
         Route::get('/finance/advance-ledger',  [FinanceController::class, 'advanceLedger']);
         Route::get('/finance/cost-comparison', [FinanceController::class, 'costComparison']);
         Route::get('/finance/cost-comparison/{itemNumber}/bom', [FinanceController::class, 'costBomBreakdown']);
+
+        Route::get('/invoices',                [InvoiceController::class, 'index']);
+        Route::post('/invoices/import',        [InvoiceController::class, 'import']);
+        Route::put('/invoices/{id}',           [InvoiceController::class, 'update']);
 
         Route::get('/kpi',                    [KpiController::class, 'index']);
         Route::get('/kpi/performance',        [KpiController::class, 'performance']);
