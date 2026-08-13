@@ -129,6 +129,14 @@ class SalesController extends Controller
         ));
     }
 
+    public function repDailyReport(Request $request): JsonResponse
+    {
+        return $this->success($this->sales->repDailyReport(
+            $request->query('territory'),
+            $request->query('date')
+        ));
+    }
+
     public function requestTypeCrosstab(Request $request): JsonResponse
     {
         $year = (int) $request->query('year', now()->year);

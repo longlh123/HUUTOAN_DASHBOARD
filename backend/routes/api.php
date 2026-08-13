@@ -69,6 +69,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnforceTerritory::class]
     ->group(function () {
         Route::get('/sales/weekly',            [SalesController::class,        'weekly']);
         Route::get('/sales/daily-report',      [SalesController::class,        'dailyReport']);
+        Route::get('/sales/daily-report/reps', [SalesController::class,        'repDailyReport']);
         Route::get('/sales/gap-to-target',    [SalesController::class,        'gapToTarget']);
         Route::get('/sales/top-accounts',     [SalesController::class,        'topAccounts']);
         Route::get('/sales/all',              [SalesController::class,        'all']);

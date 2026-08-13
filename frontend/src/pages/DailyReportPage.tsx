@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from 'react'
-import type { DailyReport, DailyReportTeamRow } from '../api/sales'
-import { fetchDailyReport } from '../api/sales'
+import type { DailyReport, DailyReportRepRow, ReportMetrics, RepDailyReport } from '../api/sales'
+import { fetchDailyReport, fetchRepDailyReport } from '../api/sales'
 import { fmtVNDFull } from '../utils/format'
 
 function pctColor(pct: number | null): string {
@@ -10,24 +10,34 @@ function pctColor(pct: number | null): string {
   return '#dc2626'
 }
 
-function groupByDepartment(teams: DailyReportTeamRow[]): [string, DailyReportTeamRow[]][] {
-  const map = new Map<string, DailyReportTeamRow[]>()
-  for (const t of teams) {
-    const key = t.department || ''
+function groupByDepartment<T extends { department: string }>(rows: T[]): [string, T[]][] {
+  const map = new Map<string, T[]>()
+  for (const r of rows) {
+    const key = r.department || ''
     if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(t)
+    map.get(key)!.push(r)
   }
   return Array.from(map.entries())
 }
 
-function sumGroup(teams: DailyReportTeamRow[]) {
-  const day_count  = teams.reduce((s, t) => s + t.day_count, 0)
-  const day_value  = teams.reduce((s, t) => s + t.day_value, 0)
-  const week_value = teams.reduce((s, t) => s + t.week_value, 0)
-  const accu_q     = teams.reduce((s, t) => s + t.accu_q, 0)
-  const target_q   = teams.reduce((s, t) => s + t.target_q, 0)
-  const accu_fy    = teams.reduce((s, t) => s + t.accu_fy, 0)
-  const target_fy  = teams.reduce((s, t) => s + t.target_fy, 0)
+function groupByTeam(rows: DailyReportRepRow[]): [string, DailyReportRepRow[]][] {
+  const map = new Map<string, DailyReportRepRow[]>()
+  for (const r of rows) {
+    const key = r.team || ''
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(r)
+  }
+  return Array.from(map.entries())
+}
+
+function sumGroup(rows: ReportMetrics[]) {
+  const day_count  = rows.reduce((s, t) => s + t.day_count, 0)
+  const day_value  = rows.reduce((s, t) => s + t.day_value, 0)
+  const week_value = rows.reduce((s, t) => s + t.week_value, 0)
+  const accu_q     = rows.reduce((s, t) => s + t.accu_q, 0)
+  const target_q   = rows.reduce((s, t) => s + t.target_q, 0)
+  const accu_fy    = rows.reduce((s, t) => s + t.accu_fy, 0)
+  const target_fy  = rows.reduce((s, t) => s + t.target_fy, 0)
   return {
     day_count, day_value, week_value, accu_q, target_q, accu_fy, target_fy,
     pct_q:  target_q  > 0 ? Math.round((accu_q  / target_q)  * 1000) / 10 : null,
@@ -63,9 +73,121 @@ function dayLabel(d: Date): string {
   return `${dm}/${d.getFullYear()}`
 }
 
+function MetricCells({ m, boldPct = false }: { m: ReportMetrics; boldPct?: boolean }) {
+  return (
+    <>
+      <td className="leaderboard__num">{m.day_count}</td>
+      <td className="leaderboard__num">{fmtVNDFull(m.day_value)}</td>
+      <td className="leaderboard__num">{fmtVNDFull(m.week_value)}</td>
+      <td className="leaderboard__num">{fmtVNDFull(m.accu_q)}</td>
+      <td className="leaderboard__num">{fmtVNDFull(m.target_q)}</td>
+      <td className="leaderboard__num" style={{ fontWeight: boldPct ? 700 : undefined, color: pctColor(m.pct_q) }}>
+        {m.pct_q !== null ? `${m.pct_q}%` : '—'}
+      </td>
+      <td className="leaderboard__num">{fmtVNDFull(m.accu_fy)}</td>
+      <td className="leaderboard__num">{fmtVNDFull(m.target_fy)}</td>
+      <td className="leaderboard__num" style={{ fontWeight: boldPct ? 700 : undefined, color: pctColor(m.pct_fy) }}>
+        {m.pct_fy !== null ? `${m.pct_fy}%` : '—'}
+      </td>
+    </>
+  )
+}
+
+function TableHead({ quarter, entityLabel }: { quarter: string; entityLabel: string }) {
+  return (
+    <thead>
+      <tr>
+        <th style={{ textAlign: 'right' }}>#</th>
+        <th>{entityLabel}</th>
+        <th style={{ textAlign: 'right' }}>SL ngày</th>
+        <th style={{ textAlign: 'right' }}>Doanh thu ngày</th>
+        <th style={{ textAlign: 'right' }}>Doanh thu tuần</th>
+        <th style={{ textAlign: 'right' }}>Lũy kế {quarter}</th>
+        <th style={{ textAlign: 'right' }}>Target {quarter}</th>
+        <th style={{ textAlign: 'right' }}>%{quarter}</th>
+        <th style={{ textAlign: 'right' }}>Lũy kế năm</th>
+        <th style={{ textAlign: 'right' }}>Target năm</th>
+        <th style={{ textAlign: 'right' }}>%Năm</th>
+      </tr>
+    </thead>
+  )
+}
+
+function TeamView({ report }: { report: DailyReport }) {
+  const grouped = groupByDepartment(report.teams)
+  let globalRank = 0
+
+  return (
+    <table className="leaderboard">
+      <TableHead quarter={report.quarter} entityLabel="Team" />
+      <tbody>
+        {grouped.map(([dept, teams]) => (
+          <Fragment key={dept}>
+            <tr className="leaderboard__dept-header">
+              <td colSpan={2}>{dept || 'Khác'}</td>
+              <MetricCells m={sumGroup(teams)} />
+            </tr>
+            {teams.map(t => {
+              globalRank++
+              return (
+                <tr key={t.team}>
+                  <td className="leaderboard__rank">{globalRank}</td>
+                  <td className="leaderboard__name">{t.team}</td>
+                  <MetricCells m={t} boldPct />
+                </tr>
+              )
+            })}
+          </Fragment>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function RepView({ report }: { report: RepDailyReport }) {
+  const grouped = groupByDepartment(report.reps)
+  let globalRank = 0
+
+  return (
+    <table className="leaderboard">
+      <TableHead quarter={report.quarter} entityLabel="Salesperson" />
+      <tbody>
+        {grouped.map(([dept, deptReps]) => (
+          <Fragment key={dept}>
+            <tr className="leaderboard__dept-header">
+              <td colSpan={2}>{dept || 'Khác'}</td>
+              <MetricCells m={sumGroup(deptReps)} />
+            </tr>
+            {groupByTeam(deptReps).map(([team, teamReps]) => (
+              <Fragment key={`${dept}-${team}`}>
+                <tr className="leaderboard__team-header">
+                  <td colSpan={2}>{team || 'Khác'}</td>
+                  <MetricCells m={sumGroup(teamReps)} />
+                </tr>
+                {teamReps.map(r => {
+                  globalRank++
+                  return (
+                    <tr key={r.id}>
+                      <td className="leaderboard__rank">{globalRank}</td>
+                      <td className="leaderboard__name">{r.name}</td>
+                      <MetricCells m={r} boldPct />
+                    </tr>
+                  )
+                })}
+              </Fragment>
+            ))}
+          </Fragment>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
 export function DailyReportPage() {
+  const [view,         setView]         = useState<'team' | 'rep'>('team')
   const [selectedDate, setSelectedDate] = useState(() => startOfDay(new Date()))
-  const [report,       setReport]       = useState<DailyReport | null>(null)
+  const [teamReport,   setTeamReport]   = useState<DailyReport | null>(null)
+  const [repReport,    setRepReport]    = useState<RepDailyReport | null>(null)
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
 
@@ -82,21 +204,27 @@ export function DailyReportPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    fetchDailyReport('ALL', toISODate(selectedDate))
-      .then(data => { if (!cancelled) setReport(data) })
+    const date = toISODate(selectedDate)
+    const request = view === 'team'
+      ? fetchDailyReport('ALL', date).then(data => { if (!cancelled) setTeamReport(data) })
+      : fetchRepDailyReport('ALL', date).then(data => { if (!cancelled) setRepReport(data) })
+    request
       .catch(e => { if (!cancelled) setError((e as Error).message) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [selectedDate])
+  }, [view, selectedDate])
 
-  const grouped = report ? groupByDepartment(report.teams) : []
-  let globalRank = 0
+  const hasData = view === 'team' ? !!teamReport && teamReport.teams.length > 0 : !!repReport && repReport.reps.length > 0
 
   return (
     <div className="dashboard">
       <div className="dashboard__header">
         <h1 className="dashboard__title">Daily Report</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="tab-group">
+            <button className={`tab-btn${view === 'team' ? ' tab-btn--active' : ''}`} onClick={() => setView('team')}>Team</button>
+            <button className={`tab-btn${view === 'rep' ? ' tab-btn--active' : ''}`} onClick={() => setView('rep')}>Nhân viên</button>
+          </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
             border: '1px solid var(--border)', borderRadius: 6,
@@ -128,74 +256,12 @@ export function DailyReportPage() {
       <div className="card">
         {loading ? (
           <p className="table-placeholder">Đang tải...</p>
-        ) : !report || report.teams.length === 0 ? (
+        ) : !hasData ? (
           <p className="table-placeholder">Không có dữ liệu.</p>
         ) : (
           <div className="table-wrap">
-            <table className="leaderboard">
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'right' }}>#</th>
-                  <th>Team</th>
-                  <th style={{ textAlign: 'right' }}>SL ngày</th>
-                  <th style={{ textAlign: 'right' }}>Doanh thu ngày</th>
-                  <th style={{ textAlign: 'right' }}>Doanh thu tuần</th>
-                  <th style={{ textAlign: 'right' }}>Lũy kế {report.quarter}</th>
-                  <th style={{ textAlign: 'right' }}>Target {report.quarter}</th>
-                  <th style={{ textAlign: 'right' }}>%{report.quarter}</th>
-                  <th style={{ textAlign: 'right' }}>Lũy kế năm</th>
-                  <th style={{ textAlign: 'right' }}>Target năm</th>
-                  <th style={{ textAlign: 'right' }}>%Năm</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grouped.map(([dept, teams]) => {
-                  const totals = sumGroup(teams)
-                  return (
-                  <Fragment key={dept}>
-                    <tr className="leaderboard__dept-header">
-                      <td colSpan={2}>{dept || 'Khác'}</td>
-                      <td className="leaderboard__num">{totals.day_count}</td>
-                      <td className="leaderboard__num">{fmtVNDFull(totals.day_value)}</td>
-                      <td className="leaderboard__num">{fmtVNDFull(totals.week_value)}</td>
-                      <td className="leaderboard__num">{fmtVNDFull(totals.accu_q)}</td>
-                      <td className="leaderboard__num">{fmtVNDFull(totals.target_q)}</td>
-                      <td className="leaderboard__num" style={{ color: pctColor(totals.pct_q) }}>
-                        {totals.pct_q !== null ? `${totals.pct_q}%` : '—'}
-                      </td>
-                      <td className="leaderboard__num">{fmtVNDFull(totals.accu_fy)}</td>
-                      <td className="leaderboard__num">{fmtVNDFull(totals.target_fy)}</td>
-                      <td className="leaderboard__num" style={{ color: pctColor(totals.pct_fy) }}>
-                        {totals.pct_fy !== null ? `${totals.pct_fy}%` : '—'}
-                      </td>
-                    </tr>
-                    {teams.map(t => {
-                      globalRank++
-                      return (
-                        <tr key={t.team}>
-                          <td className="leaderboard__rank">{globalRank}</td>
-                          <td className="leaderboard__name">{t.team}</td>
-                          <td className="leaderboard__num">{t.day_count}</td>
-                          <td className="leaderboard__num">{fmtVNDFull(t.day_value)}</td>
-                          <td className="leaderboard__num">{fmtVNDFull(t.week_value)}</td>
-                          <td className="leaderboard__num">{fmtVNDFull(t.accu_q)}</td>
-                          <td className="leaderboard__num">{fmtVNDFull(t.target_q)}</td>
-                          <td className="leaderboard__num" style={{ fontWeight: 700, color: pctColor(t.pct_q) }}>
-                            {t.pct_q !== null ? `${t.pct_q}%` : '—'}
-                          </td>
-                          <td className="leaderboard__num">{fmtVNDFull(t.accu_fy)}</td>
-                          <td className="leaderboard__num">{fmtVNDFull(t.target_fy)}</td>
-                          <td className="leaderboard__num" style={{ fontWeight: 700, color: pctColor(t.pct_fy) }}>
-                            {t.pct_fy !== null ? `${t.pct_fy}%` : '—'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
+            {view === 'team' && teamReport ? <TeamView report={teamReport} /> : null}
+            {view === 'rep' && repReport ? <RepView report={repReport} /> : null}
           </div>
         )}
       </div>

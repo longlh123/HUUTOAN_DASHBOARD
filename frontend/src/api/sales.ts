@@ -218,9 +218,7 @@ export type WeeklyDealItem = {
   value: number
 }
 
-export type DailyReportTeamRow = {
-  team:        string
-  department:  string
+export type ReportMetrics = {
   day_count:   number
   day_value:   number
   week_value:  number
@@ -232,11 +230,30 @@ export type DailyReportTeamRow = {
   pct_fy:      number | null
 }
 
+export type DailyReportTeamRow = ReportMetrics & {
+  team:        string
+  department:  string
+}
+
 export type DailyReport = {
   date:       string
   quarter:    string
   year:       number
   teams:      DailyReportTeamRow[]
+}
+
+export type DailyReportRepRow = ReportMetrics & {
+  id:          string
+  name:        string
+  team:        string
+  department:  string
+}
+
+export type RepDailyReport = {
+  date:       string
+  quarter:    string
+  year:       number
+  reps:       DailyReportRepRow[]
 }
 
 export type DeviceProductLineItem = {
@@ -423,6 +440,9 @@ export const fetchWeeklyDeals = (territory: string, weekOffset: number, departme
 
 export const fetchDailyReport = (territory: string, date: string) =>
   apiFetch<DailyReport>(`${BASE}/daily-report?${new URLSearchParams({ territory, date })}`)
+
+export const fetchRepDailyReport = (territory: string, date: string) =>
+  apiFetch<RepDailyReport>(`${BASE}/daily-report/reps?${new URLSearchParams({ territory, date })}`)
 
 export const fetchAllSales = (range: DateRange, groupBy: GroupBy, territory: string, department?: string) =>
   apiFetch<SalesAll>(`${BASE}/all?${qs(range, { group_by: groupBy, territory, ...(department ? { department } : {}) })}`)

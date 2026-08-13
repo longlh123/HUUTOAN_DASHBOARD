@@ -42,9 +42,9 @@ input  { font-family: inherit; }
 
 /* ── Dashboard layout ──────────────────────────────────── */
 .dashboard {
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 28px 20px 48px;
+  padding: 28px 16px 48px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -460,6 +460,19 @@ input  { font-family: inherit; }
   background: var(--accent-light) !important;
 }
 
+/* Team sub-header (nested inside department group) */
+.leaderboard__team-header td {
+  background: var(--surface);
+  color: var(--text-h);
+  font-weight: 600;
+  font-size: 11px;
+  padding: 5px 12px 5px 28px;
+}
+
+.leaderboard__team-header:hover td {
+  background: var(--surface) !important;
+}
+
 /* Win rate badge */
 .win-rate {
   display: inline-block;
@@ -765,6 +778,11 @@ input  { font-family: inherit; }
   position: sticky;
   top: 0;
   height: 100vh;
+  transition: width 0.2s ease;
+}
+
+.sidebar--collapsed {
+  width: 64px;
 }
 
 .sidebar__brand {
@@ -778,6 +796,32 @@ input  { font-family: inherit; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar--collapsed .sidebar__brand {
+  padding: 0 12px 20px;
+  justify-content: center;
+}
+
+.sidebar--collapsed .sidebar__brand-label {
+  display: none;
+}
+
+.sidebar__collapse-btn {
+  background: none;
+  border: none;
+  color: var(--text);
+  padding: 2px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+}
+
+.sidebar__collapse-btn:hover {
+  background: var(--accent-light);
+  color: var(--accent);
 }
 
 .sidebar__close {
@@ -797,7 +841,9 @@ input  { font-family: inherit; }
 }
 
 .sidebar__link {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 9px 20px;
   color: var(--text);
   text-decoration: none;
@@ -805,6 +851,19 @@ input  { font-family: inherit; }
   font-weight: 500;
   border-radius: 0;
   transition: background 0.15s, color 0.15s;
+}
+
+.nav-icon {
+  flex-shrink: 0;
+}
+
+.sidebar--collapsed .sidebar__link {
+  justify-content: center;
+  padding: 9px 0;
+}
+
+.sidebar--collapsed .sidebar__link-label {
+  display: none;
 }
 
 .sidebar__link:hover {
@@ -855,6 +914,37 @@ input  { font-family: inherit; }
     transition: transform 0.25s ease;
     box-shadow: none;
   }
+
+  /* Thu nho chi co y nghia tren desktop — tren mobile sidebar la overlay tam thoi, luon full width */
+  .sidebar--collapsed {
+    width: 200px;
+  }
+
+  .sidebar__collapse-btn {
+    display: none;
+  }
+
+  .sidebar--collapsed .sidebar__brand {
+    padding: 0 20px 20px;
+    justify-content: space-between;
+  }
+
+  .sidebar--collapsed .sidebar__brand-label {
+    display: inline;
+  }
+
+  .sidebar--collapsed .sidebar__link {
+    justify-content: flex-start;
+    padding: 9px 20px;
+  }
+
+  .sidebar--collapsed .sidebar__link-label {
+    display: inline;
+  }
+
+  /* .sidebar__user/.sidebar__logout mobile overrides nam o cuoi file (sau section
+     "Sidebar user") de thang cascade — cac rule tuong ung o day se bi de nen khong
+     lap lai o day. */
 
   .sidebar--open {
     transform: translateX(0);
@@ -1350,10 +1440,38 @@ input  { font-family: inherit; }
   color: var(--text);
   cursor: pointer;
   transition: background .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .sidebar__logout:hover {
   background: var(--surface);
+}
+
+.sidebar__logout .nav-icon {
+  display: none;
+}
+
+.sidebar--collapsed .sidebar__user {
+  padding: 12px 8px;
+}
+
+.sidebar--collapsed .sidebar__user-label {
+  display: none;
+}
+
+.sidebar--collapsed .sidebar__logout {
+  margin-top: 0;
+}
+
+.sidebar--collapsed .sidebar__logout .nav-icon {
+  display: inline-flex;
+}
+
+.sidebar--collapsed .sidebar__logout-label {
+  display: none;
 }
 
 /* ── TerritoryFilter disabled ───────────────────────────── */
@@ -1583,4 +1701,25 @@ input  { font-family: inherit; }
 .kpi-settings__year-select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* Sidebar tren mobile luon hien full (khong thu nho) — dat cuoi file de thang cascade
+   voi cac rule .sidebar--collapsed nam sau @media block trong file (vd .sidebar__user-label,
+   .sidebar__logout .nav-icon), vi cung specificity thi rule dung sau trong file thang. */
+@media (max-width: 768px) {
+  .sidebar--collapsed .sidebar__user {
+    padding: 16px;
+  }
+
+  .sidebar--collapsed .sidebar__user-label {
+    display: block;
+  }
+
+  .sidebar--collapsed .sidebar__logout .nav-icon {
+    display: none;
+  }
+
+  .sidebar--collapsed .sidebar__logout-label {
+    display: inline;
+  }
 }

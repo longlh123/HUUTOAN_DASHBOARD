@@ -509,6 +509,109 @@ class SalesPerformanceService
         ];
     }
 
+    /**
+     * Giong dailyReport() nhung theo tung salesperson thay vi theo team — dung chung
+     * ky thuat: fetch 1 lan cho ca tuan roi loc ra ngay, target lay tu kpiPerformance()
+     * (da co san rollover per-user), target_year la tong target GOC (khong cong rollover).
+     */
+    public function repDailyReport(?string $territory = null, ?string $date = null): array
+    {
+        $now     = now();
+        $year    = $now->year;
+        $quarter = $now->quarter;
+        $today   = $now->copy()->startOfDay();
+
+        $day = $date ? Carbon::parse($date)->startOfDay() : $today->copy();
+        if ($day->gt($today)) $day = $today->copy();
+
+        $weekStart = $day->copy()->startOfWeek(Carbon::MONDAY);
+        $weekEnd   = $day->copy()->endOfWeek(Carbon::SUNDAY);
+
+        $weekDeals = $this->calcOppValue(
+            $this->resolveQuoteValues($this->filterByTerritory($this->fetchWonQuotes($weekStart, $weekEnd), $territory), 300)
+        );
+        $weekByOwner = $weekDeals->groupBy('_ownerid_value');
+
+        $dayDeals   = $weekDeals->filter(fn ($d) => Carbon::parse($d['closedon'])->isSameDay($day));
+        $dayByOwner = $dayDeals->groupBy('_ownerid_value');
+
+        $qStart = $now->copy()->startOfQuarter();
+        $qEnd   = $now->copy()->endOfDay();
+        $yStart = Carbon::create($year, 1, 1)->startOfDay();
+        $yEnd   = $now->copy()->endOfDay();
+
+        $accuQByOwner  = $this->ownerActualTotals($qStart, $qEnd, $territory);
+        $accuFyByOwner = $this->ownerActualTotals($yStart, $yEnd, $territory);
+        $perfByOwner   = collect($this->kpiPerformance($year, $territory))->keyBy('user_id');
+
+        $users = $this->fetchUsers();
+
+        // Fallback ten/team tu annotation cua deal, phong khi owner khong con active trong fetchUsers()
+        $fallbackByOwner = $weekDeals->groupBy('_ownerid_value')->map(fn ($g) => $g->first());
+
+        $ownerIds = $dayByOwner->keys()
+            ->merge($weekByOwner->keys())
+            ->merge($accuQByOwner->keys())
+            ->merge($accuFyByOwner->keys())
+            ->merge($perfByOwner->keys())
+            ->filter()
+            ->unique()
+            ->values();
+
+        $rows = $ownerIds->map(function ($ownerId) use ($dayByOwner, $weekByOwner, $accuQByOwner, $accuFyByOwner, $perfByOwner, $users, $fallbackByOwner, $quarter) {
+            $u        = $users->get($ownerId);
+            $fallback = $fallbackByOwner->get($ownerId);
+
+            $name = $u['fullname']
+                ?? $fallback['_ownerid_value@OData.Community.Display.V1.FormattedValue']
+                ?? 'Unknown';
+            $team = $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue']
+                ?? $fallback['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue']
+                ?? '';
+            $department = $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '';
+
+            $dayOwnerDeals  = $dayByOwner->get($ownerId, collect());
+            $weekOwnerDeals = $weekByOwner->get($ownerId, collect());
+            $accuQ          = (float) ($accuQByOwner->get($ownerId) ?? 0);
+            $accuFy         = (float) ($accuFyByOwner->get($ownerId) ?? 0);
+
+            $perf     = $perfByOwner->get($ownerId);
+            $targetQ  = (float) ($perf['quarters']["q{$quarter}"]['effective'] ?? 0);
+            $targetFy = $perf ? (float) array_sum(array_column($perf['quarters'], 'target')) : 0.0;
+
+            return [
+                'id'         => $ownerId,
+                'name'       => $name,
+                'team'       => $team,
+                'department' => $department,
+                'day_count'  => $dayOwnerDeals->count(),
+                'day_value'  => (float) $dayOwnerDeals->sum('resolved_value'),
+                'week_value' => (float) $weekOwnerDeals->sum('resolved_value'),
+                'accu_q'     => $accuQ,
+                'target_q'   => $targetQ,
+                'pct_q'      => $targetQ > 0 ? round($accuQ / $targetQ * 100, 1) : null,
+                'accu_fy'    => $accuFy,
+                'target_fy'  => $targetFy,
+                'pct_fy'     => $targetFy > 0 ? round($accuFy / $targetFy * 100, 1) : null,
+            ];
+        })->sortByDesc('accu_fy')->values();
+
+        return [
+            'date'    => $day->toDateString(),
+            'quarter' => "Q{$quarter}",
+            'year'    => $year,
+            'reps'    => $rows->all(),
+        ];
+    }
+
+    private function ownerActualTotals(Carbon $from, Carbon $to, ?string $territory): Collection
+    {
+        $wonQuotes = $this->resolveQuoteValues($this->filterByTerritory($this->fetchWonQuotes($from, $to), $territory), $this->ttlFor($to));
+
+        return $wonQuotes->groupBy('_ownerid_value')
+            ->map(fn ($ownerQuotes) => (float) $this->calcOppValue($ownerQuotes)->sum('resolved_value'));
+    }
+
     // Won quotes only (statecode=2) — dùng cho byPeriod
     private function fetchWonQuotes(Carbon $from, Carbon $to): Collection
     {
