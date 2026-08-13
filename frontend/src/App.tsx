@@ -3,6 +3,7 @@ import { AuthProvider } from './contexts/AuthContext'
 import { useAuth } from './contexts/AuthContext'
 import { AppLayout } from './components/AppLayout'
 import { SalesDashboard } from './pages/SalesDashboard'
+import { DailyReportPage } from './pages/DailyReportPage'
 import { ServicesDashboard } from './pages/ServicesDashboard'
 import { FinanceDashboard } from './pages/FinanceDashboard'
 import { KpiSettingsPage } from './pages/KpiSettingsPage'
@@ -45,6 +46,7 @@ export default function App() {
             </ProtectedRoute>
           }>
             <Route path="/dashboard/sales"    element={<SalesDashboard />} />
+            <Route path="/dashboard/sales/daily-report" element={<DailyReportPage />} />
             <Route path="/dashboard/services" element={<ServicesDashboard />} />
             <Route path="/dashboard/finance"   element={<FinanceDashboard />} />
             <Route path="/dashboard/devices"  element={<DeviceDashboard />} />

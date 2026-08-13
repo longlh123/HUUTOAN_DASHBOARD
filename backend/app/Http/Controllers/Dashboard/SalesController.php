@@ -121,6 +121,14 @@ class SalesController extends Controller
         ));
     }
 
+    public function dailyReport(Request $request): JsonResponse
+    {
+        return $this->success($this->sales->dailyReport(
+            $request->query('territory'),
+            $request->query('date')
+        ));
+    }
+
     public function requestTypeCrosstab(Request $request): JsonResponse
     {
         $year = (int) $request->query('year', now()->year);

@@ -432,6 +432,83 @@ class SalesPerformanceService
         return $result;
     }
 
+    /**
+     * Bao cao nhanh theo tung team: SL/doanh thu trong 1 ngay, luy ke quy hien tai + target,
+     * luy ke nam + target — dung chung logic voi TeamTargetChart/tab Hieu suat.
+     */
+    public function dailyReport(?string $territory = null, ?string $date = null): array
+    {
+        $now     = now();
+        $year    = $now->year;
+        $quarter = $now->quarter;
+        $today   = $now->copy()->startOfDay();
+
+        $day = $date ? Carbon::parse($date)->startOfDay() : $today->copy();
+        if ($day->gt($today)) $day = $today->copy();
+
+        // Fetch ca tuan chua ngay dang chon 1 lan, roi loc rieng ra ngay — tranh goi CRM 2 lan
+        $weekStart = $day->copy()->startOfWeek(Carbon::MONDAY);
+        $weekEnd   = $day->copy()->endOfWeek(Carbon::SUNDAY);
+
+        $weekDeals = $this->calcOppValue(
+            $this->resolveQuoteValues($this->filterByTerritory($this->fetchWonQuotes($weekStart, $weekEnd), $territory), 300)
+        );
+        $weekByTeam = $weekDeals->groupBy(fn ($d) => $d['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue'] ?? '');
+
+        $dayDeals  = $weekDeals->filter(fn ($d) => Carbon::parse($d['closedon'])->isSameDay($day));
+        $dayByTeam = $dayDeals->groupBy(fn ($d) => $d['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue'] ?? '');
+
+        $qStart = $now->copy()->startOfQuarter();
+        $qEnd   = $now->copy()->endOfDay();
+        $yStart = Carbon::create($year, 1, 1)->startOfDay();
+        $yEnd   = $now->copy()->endOfDay();
+
+        $accuQByTeam  = $this->byTeam($qStart, $qEnd, $territory, null)->keyBy('name');
+        $accuFyByTeam = $this->byTeam($yStart, $yEnd, $territory, null)->keyBy('name');
+        $targetByTeam = collect($this->teamKpiPerformance($year, $territory))->keyBy('name');
+
+        $teamNames = $dayByTeam->keys()
+            ->merge($weekByTeam->keys())
+            ->merge($accuQByTeam->keys())
+            ->merge($accuFyByTeam->keys())
+            ->merge($targetByTeam->keys())
+            ->filter()
+            ->unique()
+            ->values();
+
+        $rows = $teamNames->map(function ($name) use ($dayByTeam, $weekByTeam, $accuQByTeam, $accuFyByTeam, $targetByTeam, $quarter) {
+            $dayTeamDeals  = $dayByTeam->get($name, collect());
+            $weekTeamDeals = $weekByTeam->get($name, collect());
+            $accuQ         = (float) ($accuQByTeam->get($name)['total_value'] ?? 0);
+            $accuFy        = (float) ($accuFyByTeam->get($name)['total_value'] ?? 0);
+            $target        = $targetByTeam->get($name);
+            $targetQ       = (float) ($target['target_q'][$quarter] ?? 0);
+            $targetFy      = (float) ($target['target_year'] ?? 0);
+            $department    = $accuFyByTeam->get($name)['department'] ?? $accuQByTeam->get($name)['department'] ?? '';
+
+            return [
+                'team'       => $name,
+                'department' => $department,
+                'day_count'  => $dayTeamDeals->count(),
+                'day_value'  => (float) $dayTeamDeals->sum('resolved_value'),
+                'week_value' => (float) $weekTeamDeals->sum('resolved_value'),
+                'accu_q'     => $accuQ,
+                'target_q'   => $targetQ,
+                'pct_q'      => $targetQ > 0 ? round($accuQ / $targetQ * 100, 1) : null,
+                'accu_fy'    => $accuFy,
+                'target_fy'  => $targetFy,
+                'pct_fy'     => $targetFy > 0 ? round($accuFy / $targetFy * 100, 1) : null,
+            ];
+        })->sortByDesc('accu_fy')->values();
+
+        return [
+            'date'       => $day->toDateString(),
+            'quarter'    => "Q{$quarter}",
+            'year'       => $year,
+            'teams'      => $rows->all(),
+        ];
+    }
+
     // Won quotes only (statecode=2) — dùng cho byPeriod
     private function fetchWonQuotes(Carbon $from, Carbon $to): Collection
     {
@@ -585,6 +662,86 @@ class SalesPerformanceService
                 'quarters' => $quarters,
             ];
         })->values()->toArray();
+    }
+
+    /**
+     * Target da rollover (effective) cua tung quy, group theo team — dung logic rollover
+     * giong het kpiPerformance() nhung tinh per-user roi cong don vao team thay vi tra rieng
+     * tung nguoi, de % o dailyReport() khop voi tab Hieu suat.
+     *
+     * @return array<int, array{team_id: string, name: string, target_q: array<int,float>, target_year: float}>
+     */
+    private function teamKpiPerformance(int $year, ?string $territory = null): array
+    {
+        $users = $this->fetchUsers()->filter(fn ($u) =>
+            !$territory || strtoupper($territory) === 'ALL' ||
+            strtoupper($u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '') === strtoupper($territory)
+        );
+
+        $userToTeam = $users->mapWithKeys(fn ($u, $id) => [$id => [
+            'id'   => $u['_businessunitid_value'] ?? '',
+            'name' => $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+        ]]);
+
+        $targets = collect($this->api->get('crc83_kpitargetses', [
+            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
+            '$filter' => "crc83_ab_year eq {$year}",
+        ], ttl: 3600)['value'] ?? [])
+            ->filter(fn ($t) => $userToTeam->has($t['_crc83_ab_user_value'] ?? ''));
+
+        if ($targets->isEmpty()) return [];
+
+        $from = Carbon::create($year, 1, 1)->startOfDay();
+        $to   = Carbon::create($year, 12, 31)->endOfDay();
+
+        $allWonQuotes = $this->resolveQuoteValues($this->filterByTerritory($this->fetchWonQuotes($from, $to), $territory), $this->ttlFor($to));
+
+        $actualByOwner = $allWonQuotes
+            ->groupBy('_ownerid_value')
+            ->map(fn ($ownerQuotes) =>
+                $ownerQuotes
+                    ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
+                    ->map(fn ($qQuotes) => (float) $this->calcOppValue($qQuotes)->sum('resolved_value'))
+            );
+
+        $now            = now();
+        $currentYear    = $now->year;
+        $currentQuarter = $now->quarter;
+
+        $teams = [];
+
+        foreach ($targets as $target) {
+            $userId = $target['_crc83_ab_user_value'] ?? '';
+            $team   = $userToTeam->get($userId);
+            if (!$team || !$team['id']) continue;
+
+            $teamId = $team['id'];
+            $teams[$teamId] ??= ['name' => $team['name'], 'target' => [1 => 0.0, 2 => 0.0, 3 => 0.0, 4 => 0.0], 'target_raw' => 0.0];
+
+            $actuals  = $actualByOwner->get($userId, collect());
+            $rollover = 0.0;
+
+            foreach ([1, 2, 3, 4] as $q) {
+                $original     = (float) ($target["crc83_ab_q{$q}"] ?? 0);
+                $effective    = $original + $rollover;
+                $actual       = (float) $actuals->get($q, 0);
+                $quarterEnded = $year < $currentYear || ($year === $currentYear && $q < $currentQuarter);
+                $rollover     = $quarterEnded ? max(0.0, $effective - $actual) : 0.0;
+
+                $teams[$teamId]['target'][$q]  += $effective;
+                $teams[$teamId]['target_raw']  += $original;
+            }
+        }
+
+        // target_year = tong target GOC (khong cong rollover) — rollover chi de doi chieu
+        // tung quy so voi actual, khong duoc lam phinh tong target ca nam so voi con so
+        // that su nhap trong KPI Settings (vd B2B dat 210 ty/nam thi phai ra dung 210 ty).
+        return collect($teams)->map(fn ($t, $id) => [
+            'team_id'      => $id,
+            'name'         => $t['name'],
+            'target_q'     => $t['target'],
+            'target_year'  => $t['target_raw'],
+        ])->values()->all();
     }
 
     public function pipeline(?string $territory = null, ?string $department = null): array

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 
 const NAV_ITEMS = [
   { to: '/dashboard/sales',    label: 'Dashboard',   adminOnly: false },
+  { to: '/dashboard/sales/daily-report', label: 'Daily Report', adminOnly: false },
   { to: '/dashboard/services', label: 'Services',    adminOnly: false },
   { to: '/dashboard/finance',  label: 'Finance',     adminOnly: false },
   { to: '/dashboard/devices',  label: 'Device',      adminOnly: false },
@@ -31,6 +32,7 @@ export function AppLayout() {
             <li key={item.to}>
               <NavLink
                 to={item.to}
+                end
                 className={({ isActive }) =>
                   'sidebar__link' + (isActive ? ' sidebar__link--active' : '')
                 }
