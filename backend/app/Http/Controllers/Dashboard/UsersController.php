@@ -21,7 +21,7 @@ class UsersController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        $payload = $request->only(['department_id', 'territory_id', 'cost_center_id', 'is_disabled']);
+        $payload = $request->only(['business_unit_id', 'department_id', 'territory_id', 'cost_center_id', 'is_disabled']);
         $this->sales->updateUser($id, $payload);
         return $this->success(['id' => $id]);
     }

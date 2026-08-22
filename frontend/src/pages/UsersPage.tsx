@@ -212,7 +212,7 @@ export function UsersPage() {
                           {u.azure_state === 0 ? 'Active' : 'Disabled'}
                         </span>
                       </td>
-                      <td>{u.business_unit || '—'}</td>
+                      <td>{u.business_unit || <span style={{ color: '#ea580c' }}>Thiếu</span>}</td>
                       <td>{u.department || <span style={{ color: '#ea580c' }}>Thiếu</span>}</td>
                       <td>{u.territory || <span style={{ color: '#ea580c' }}>Thiếu</span>}</td>
                       <td>{u.cost_center || '—'}</td>

@@ -207,6 +207,20 @@ class CrmApiService
         $response->throw();
     }
 
+    // Xoá giá trị 1 single-valued navigation property (vd lookup field) — PATCH voi
+    // gia tri null khong hop le trong Dataverse, phai DELETE thang vao {property}/$ref.
+    public function deleteRef(string $entity, string $id, string $navigationProperty): void
+    {
+        $response = $this->clientWrite()->delete("{$entity}({$id})/{$navigationProperty}/\$ref");
+
+        if ($response->unauthorized()) {
+            $this->tokenService->forceRefresh();
+            $response = $this->clientWrite()->delete("{$entity}({$id})/{$navigationProperty}/\$ref");
+        }
+
+        $response->throw();
+    }
+
     private function clientWrite(): PendingRequest
     {
         return Http::withToken($this->tokenService->getToken())

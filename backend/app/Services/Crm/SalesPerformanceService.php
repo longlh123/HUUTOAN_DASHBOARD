@@ -199,6 +199,18 @@ class SalesPerformanceService
         ];
     }
 
+    // kpiQuarterlyTotals/kpiByRep/kpiByTeam/teamKpiPerformance đều gọi crc83_kpitargetses
+    // với đúng 1 bộ $select/$filter này (theo year) nên chia sẻ chung 1 cache key (ttl 3600s) —
+    // gọi hàm này sau khi tạo/sửa/xoá KPI target để invalidate hết 4 chỗ cùng lúc, tránh
+    // Daily Report/Performance tab hiển thị số cũ tới khi cache tự hết hạn.
+    public function invalidateKpiTargetsCache(int $year): void
+    {
+        $this->api->forget('crc83_kpitargetses', [
+            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
+            '$filter' => "crc83_ab_year eq {$year}",
+        ]);
+    }
+
     // KPI target theo từng user (owner_id) cho các quý trong date range
     private function kpiByRep(int $year): Collection
     {
@@ -1311,19 +1323,22 @@ class SalesPerformanceService
     public function users(): Collection
     {
         return $this->fetchUsers()
-            ->filter(function ($u) {
+            // Truoc day con loai ca user trong/generic BU (Manager/COO cap cao khong thuoc
+            // 1 team cu the) - khien ho khong chon duoc de nhan tam KPI cua nguoi da nghi.
+            // Chi loai tai khoan tester.
+            ->filter(fn ($u) => !str_starts_with(strtolower($u['fullname'] ?? ''), 'tester'))
+            ->map(function ($u) {
                 $team = $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] ?? '';
-                return $team !== ''
-                    && !in_array($team, self::GENERIC_BUSINESS_UNITS)
-                    && !str_starts_with(strtolower($u['fullname'] ?? ''), 'tester');
+                if (in_array($team, self::GENERIC_BUSINESS_UNITS)) $team = '';
+
+                return [
+                    'id'         => $u['systemuserid'],
+                    'name'       => $u['fullname'] ?? '',
+                    'territory'  => $u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+                    'department' => $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+                    'team'       => $team,
+                ];
             })
-            ->map(fn ($u) => [
-                'id'         => $u['systemuserid'],
-                'name'       => $u['fullname'] ?? '',
-                'territory'  => $u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-                'department' => $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-                'team'       => $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-            ])
             ->values()
             ->sortBy('name')
             ->values();
@@ -1360,45 +1375,56 @@ class SalesPerformanceService
         return collect($data['value'] ?? [])
             ->filter(fn ($u) =>
                 str_ends_with(strtolower($u['internalemailaddress'] ?? ''), '@huutoan.com') &&
-                !empty($u['businessunitid']['name']) &&
-                !in_array($u['businessunitid']['name'], self::GENERIC_BUSINESS_UNITS) &&
                 !str_starts_with(strtolower($u['fullname'] ?? ''), 'tester')
             )
-            ->map(fn ($u) => [
-                'id'              => $u['systemuserid'],
-                'full_name'       => $u['fullname'] ?? '',
-                'title'           => $u['title'] ?? '',
-                'email'           => $u['internalemailaddress'] ?? '',
-                'mobile'          => $u['mobilephone'] ?? '',
-                'is_disabled'     => (bool) ($u['isdisabled'] ?? false),
-                'azure_state'     => (int) ($u['azurestate'] ?? 0),
-                'business_unit'    => $u['businessunitid']['name'] ?? '',
-                'business_unit_id' => $u['businessunitid']['businessunitid'] ?? null,
-                'department'      => $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-                'department_id'   => $u['_ab_dim_department_id_value'] ?? null,
-                'cost_center'     => $u['_ab_dim_cost_center_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-                'cost_center_id'  => $u['_ab_dim_cost_center_id_value'] ?? null,
-                'territory'       => $u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-                'territory_id'    => $u['_ab_dim_territory_id_value'] ?? null,
-            ])
+            ->map(function ($u) {
+                $isGenericBu = empty($u['businessunitid']['name']) || in_array($u['businessunitid']['name'], self::GENERIC_BUSINESS_UNITS);
+
+                return [
+                    'id'              => $u['systemuserid'],
+                    'full_name'       => $u['fullname'] ?? '',
+                    'title'           => $u['title'] ?? '',
+                    'email'           => $u['internalemailaddress'] ?? '',
+                    'mobile'          => $u['mobilephone'] ?? '',
+                    'is_disabled'     => (bool) ($u['isdisabled'] ?? false),
+                    'azure_state'     => (int) ($u['azurestate'] ?? 0),
+                    'business_unit'    => $isGenericBu ? '' : $u['businessunitid']['name'],
+                    'business_unit_id' => $isGenericBu ? null : $u['businessunitid']['businessunitid'],
+                    'department'      => $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+                    'department_id'   => $u['_ab_dim_department_id_value'] ?? null,
+                    'cost_center'     => $u['_ab_dim_cost_center_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+                    'cost_center_id'  => $u['_ab_dim_cost_center_id_value'] ?? null,
+                    'territory'       => $u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
+                    'territory_id'    => $u['_ab_dim_territory_id_value'] ?? null,
+                ];
+            })
             ->sortBy('full_name')
             ->values();
     }
+
+    // Lookup field co the xoa ve trong qua UI (F3/F5/F4 - optional custom dimension)
+    private const CLEARABLE_LOOKUPS = [
+        'department_id'  => 'ab_dim_department_id',
+        'territory_id'   => 'ab_dim_territory_id',
+        'cost_center_id' => 'ab_dim_cost_center_id',
+    ];
 
     public function updateUser(string $userId, array $payload): void
     {
         $body = [];
 
         // Entity set names cho dimension lookups — xác nhận lại với D365 metadata nếu PATCH thất bại
-        if (!empty($payload['department_id'])) {
-            $body['ab_dim_department_id@odata.bind'] = "/ab_financial_dimension_values({$payload['department_id']})";
+        foreach (self::CLEARABLE_LOOKUPS as $key => $navProperty) {
+            if (!empty($payload[$key])) {
+                $body["{$navProperty}@odata.bind"] = "/ab_financial_dimension_values({$payload[$key]})";
+            } elseif (array_key_exists($key, $payload)) {
+                // Key co trong payload nhung rong = nguoi dung chon "— Chưa gán —" va bam Luu.
+                // PATCH voi gia tri null khong xoa duoc lookup trong Dataverse, phai DELETE $ref rieng.
+                $this->api->deleteRef('systemusers', $userId, $navProperty);
+            }
         }
-        if (!empty($payload['territory_id'])) {
-            $body['ab_dim_territory_id@odata.bind'] = "/ab_financial_dimension_values({$payload['territory_id']})";
-        }
-        if (!empty($payload['cost_center_id'])) {
-            $body['ab_dim_cost_center_id@odata.bind'] = "/ab_financial_dimension_values({$payload['cost_center_id']})";
-        }
+
+        // businessunitid la field bat buoc tren systemuser, khong the xoa ve trong — chi cho set.
         if (!empty($payload['business_unit_id'])) {
             $body['businessunitid@odata.bind'] = "/businessunits({$payload['business_unit_id']})";
         }
@@ -1408,9 +1434,10 @@ class SalesPerformanceService
 
         if (!empty($body)) {
             $this->api->patch('systemusers', $userId, $body);
-            $this->api->forget('systemusers', $this->allUsersParams());
-            $this->api->forget('systemusers', $this->fetchUsersParams());
         }
+
+        $this->api->forget('systemusers', $this->allUsersParams());
+        $this->api->forget('systemusers', $this->fetchUsersParams());
     }
 
     public function opportunityQuality(?string $territory = null, ?string $department = null): array

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CrmUser, KpiPerformance, KpiTarget } from '../api/sales'
+import type { CrmUser, KpiPerformance, KpiTarget, UserDetail } from '../api/sales'
 import {
   createKpiTarget,
   deleteKpiTarget,
   fetchCrmUsers,
   fetchKpiPerformance,
   fetchKpiTargets,
+  fetchUserList,
   updateKpiTarget,
 } from '../api/sales'
 import { fmtVNDFull } from '../utils/format'
@@ -98,7 +99,10 @@ function UserCombobox({
               onMouseDown={() => select(u)}
             >
               <span className="combobox__item-name">{u.name}</span>
-              <span className="combobox__item-meta">{u.team} · {u.territory}</span>
+              <span className="combobox__item-meta">
+                {u.team} · {u.territory}
+                {!u.department && <span style={{ color: '#ea580c' }}> · Chưa gán phòng ban</span>}
+              </span>
             </li>
           ))}
         </ul>
@@ -115,6 +119,7 @@ export function KpiSettingsPage() {
   const [tab,        setTab]        = useState<'targets' | 'performance'>('targets')
   const [year,       setYear]       = useState(CURRENT_YEAR)
   const [deptFilter, setDeptFilter] = useState<string>('ALL')
+  const [nameFilter, setNameFilter] = useState('')
   const [targets,    setTargets]    = useState<KpiTarget[]>([])
   const [users,      setUsers]      = useState<CrmUser[]>([])
   const [edits,      setEdits]      = useState<Record<string, EditState>>({})
@@ -127,6 +132,13 @@ export function KpiSettingsPage() {
   const [perf,        setPerf]        = useState<KpiPerformance[]>([])
   const [perfLoading, setPerfLoading] = useState(false)
   const [perfQuarter, setPerfQuarter] = useState<'all' | 'q1' | 'q2' | 'q3' | 'q4'>(CURRENT_QUARTER)
+  const [userDetails, setUserDetails] = useState<UserDetail[]>([])
+
+  useEffect(() => {
+    fetchUserList().then(setUserDetails).catch(() => {})
+  }, [])
+
+  const statusById = new Map(userDetails.map(u => [u.id, u]))
 
   useEffect(() => {
     setLoading(true)
@@ -160,22 +172,22 @@ export function KpiSettingsPage() {
   const usedIds   = new Set(targets.map(t => t.crm_user_id))
   const available = users.filter(u =>
     !usedIds.has(u.id) &&
-    (deptFilter === 'ALL' || u.department === deptFilter)
+    // User chưa gán department (Manager/COO/cấp cao không thuộc 1 team cụ thể) luôn hiện,
+    // bất kể đang lọc department nào — để có thể tạm gán KPI của người nghỉ cho họ.
+    (deptFilter === 'ALL' || u.department === deptFilter || !u.department)
   )
 
-  const filteredTargets = deptFilter === 'ALL'
-    ? targets
-    : targets.filter(t => {
-        const user = users.find(u => u.id === t.crm_user_id)
-        return user?.department === deptFilter
-      })
+  const filteredTargets = targets.filter(t => {
+    const user = users.find(u => u.id === t.crm_user_id)
+    return (deptFilter === 'ALL' || user?.department === deptFilter) &&
+      (!nameFilter.trim() || t.user_name.toLowerCase().includes(nameFilter.trim().toLowerCase()))
+  })
 
-  const filteredPerf = deptFilter === 'ALL'
-    ? perf
-    : perf.filter(r => {
-        const user = users.find(u => u.id === r.user_id)
-        return user?.department === deptFilter
-      })
+  const filteredPerf = perf.filter(r => {
+    const user = users.find(u => u.id === r.user_id)
+    return (deptFilter === 'ALL' || user?.department === deptFilter) &&
+      (!nameFilter.trim() || r.name.toLowerCase().includes(nameFilter.trim().toLowerCase()))
+  })
 
   function startAdd() {
     setNewRow({ crm_user_id: '', user_name: '', q1: '', q2: '', q3: '', q4: '' })
@@ -243,6 +255,37 @@ export function KpiSettingsPage() {
     }
   }
 
+  function exportKpiExcel() {
+    const header = ['Team', 'Name', 'KPI Q1', 'KPI Q2', 'KPI Q3', 'KPI Q4', 'CA NAM']
+    const rows = filteredTargets.map(t => {
+      const team = users.find(u => u.id === t.crm_user_id)?.team ?? ''
+      const e    = edits[t.id] ?? targetToEdit(t)
+      const q1   = fromStr(e.q1) ?? 0
+      const q2   = fromStr(e.q2) ?? 0
+      const q3   = fromStr(e.q3) ?? 0
+      const q4   = fromStr(e.q4) ?? 0
+      return [team, t.user_name, q1, q2, q3, q4, q1 + q2 + q3 + q4]
+    })
+
+    // Dung dau ";" lam delimiter (khong phai ",") vi Excel o may Windows/VN mac dinh
+    // dung dau "," lam decimal separator, nen se hieu "," trong CSV la phan cach thap phan
+    // chu khong phai phan cach cot, lam ca dong don vao 1 o.
+    const escape = (v: string | number) => {
+      const s = String(v)
+      return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csv = [header, ...rows].map(row => row.map(escape).join(';')).join('\r\n')
+
+    // BOM de Excel doc dung UTF-8 (khong bi loi font tieng Viet)
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `kpi-targets-${year}${deptFilter !== 'ALL' ? `-${deptFilter}` : ''}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const newRowSum = newRow
     ? (['q1', 'q2', 'q3', 'q4'] as const).reduce((acc, q) => acc + (fromStr(newRow[q]) ?? 0), 0)
     : 0
@@ -269,6 +312,14 @@ export function KpiSettingsPage() {
             >Hiệu suất</button>
           </div>
           <div className="kpi-settings__header-actions">
+            <input
+              className="kpi-settings__input"
+              type="search"
+              placeholder="Tìm nhân viên..."
+              value={nameFilter}
+              onChange={e => setNameFilter(e.target.value)}
+              style={{ width: 180, textAlign: 'left' }}
+            />
             {departments.length > 1 && (
               <select
                 className="kpi-settings__year-select"
@@ -290,13 +341,22 @@ export function KpiSettingsPage() {
               ))}
             </select>
             {tab === 'targets' && (
-              <button
-                className="kpi-settings__add-btn"
-                onClick={startAdd}
-                disabled={!!newRow || available.length === 0}
-              >
-                + Thêm
-              </button>
+              <>
+                <button
+                  className="kpi-settings__export-btn"
+                  onClick={exportKpiExcel}
+                  disabled={filteredTargets.length === 0}
+                >
+                  Xuất Excel
+                </button>
+                <button
+                  className="kpi-settings__add-btn"
+                  onClick={startAdd}
+                  disabled={!!newRow || available.length === 0}
+                >
+                  + Thêm
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -316,6 +376,7 @@ export function KpiSettingsPage() {
           <thead>
             <tr>
               <th>Nhân viên</th>
+              <th style={{ textAlign: 'center' }}>D365 Status</th>
               <th style={{ textAlign: 'right' }}>Q1</th>
               <th style={{ textAlign: 'right' }}>Q2</th>
               <th style={{ textAlign: 'right' }}>Q3</th>
@@ -332,6 +393,17 @@ export function KpiSettingsPage() {
               return (
                 <tr key={t.id}>
                   <td className="leaderboard__name">{t.user_name}</td>
+                  <td style={{ textAlign: 'center' }}>
+                    {(() => {
+                      const u = statusById.get(t.crm_user_id)
+                      if (!u) return '—'
+                      return (
+                        <span className={`win-rate ${u.is_disabled ? 'win-rate--low' : 'win-rate--high'}`}>
+                          {u.is_disabled ? 'Disabled' : 'Active'}
+                        </span>
+                      )
+                    })()}
+                  </td>
                   {(['q1', 'q2', 'q3', 'q4'] as const).map(q => (
                     <td key={q} style={{ textAlign: 'right' }}>
                       <input
@@ -380,6 +452,9 @@ export function KpiSettingsPage() {
                     )}
                   />
                 </td>
+                <td style={{ textAlign: 'center' }}>
+                  <span className="win-rate win-rate--high">Active</span>
+                </td>
                 {(['q1', 'q2', 'q3', 'q4'] as const).map(q => (
                   <td key={q} style={{ textAlign: 'right' }}>
                     <input
@@ -408,10 +483,12 @@ export function KpiSettingsPage() {
 
             {filteredTargets.length === 0 && !newRow && (
               <tr>
-                <td colSpan={7} className="table-placeholder">
-                  {deptFilter !== 'ALL'
-                    ? `Chưa có KPI nào cho phòng ban "${deptFilter}".`
-                    : 'Chưa có KPI nào. Nhấn "+ Thêm" để bắt đầu.'}
+                <td colSpan={8} className="table-placeholder">
+                  {nameFilter.trim()
+                    ? `Không tìm thấy nhân viên nào khớp "${nameFilter.trim()}".`
+                    : deptFilter !== 'ALL'
+                      ? `Chưa có KPI nào cho phòng ban "${deptFilter}".`
+                      : 'Chưa có KPI nào. Nhấn "+ Thêm" để bắt đầu.'}
                 </td>
               </tr>
             )}
@@ -436,14 +513,17 @@ export function KpiSettingsPage() {
             ? <p className="table-placeholder">Đang tải...</p>
             : filteredPerf.length === 0
               ? <p className="table-placeholder">
-                  {deptFilter !== 'ALL'
-                    ? `Chưa có dữ liệu KPI cho phòng ban "${deptFilter}" năm ${year}.`
-                    : `Chưa có dữ liệu KPI cho năm ${year}.`}
+                  {nameFilter.trim()
+                    ? `Không tìm thấy nhân viên nào khớp "${nameFilter.trim()}".`
+                    : deptFilter !== 'ALL'
+                      ? `Chưa có dữ liệu KPI cho phòng ban "${deptFilter}" năm ${year}.`
+                      : `Chưa có dữ liệu KPI cho năm ${year}.`}
                 </p>
               : <table className="leaderboard kpi-settings__table kpi-perf__table">
                   <thead>
                     <tr>
                       <th>Nhân viên</th>
+                      <th style={{ textAlign: 'center' }}>D365 Status</th>
                       <th style={{ textAlign: 'right' }}>Mục tiêu</th>
                       <th style={{ textAlign: 'right' }}>Thực tế</th>
                       <th style={{ textAlign: 'right' }}>% Đạt</th>
@@ -462,6 +542,17 @@ export function KpiSettingsPage() {
                       return (
                         <tr key={row.user_id}>
                           <td className="leaderboard__name">{row.name}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            {(() => {
+                              const u = statusById.get(row.user_id)
+                              if (!u) return '—'
+                              return (
+                                <span className={`win-rate ${u.is_disabled ? 'win-rate--low' : 'win-rate--high'}`}>
+                                  {u.is_disabled ? 'Disabled' : 'Active'}
+                                </span>
+                              )
+                            })()}
+                          </td>
                           <td style={{ textAlign: 'right' }}>{tgt > 0 ? fmtVNDFull(tgt) : '—'}</td>
                           <td style={{ textAlign: 'right' }}>
                             <span className={actCls}>{act > 0 ? fmtVNDFull(act) : '—'}</span>
@@ -476,6 +567,7 @@ export function KpiSettingsPage() {
                   <tfoot>
                     <tr className="kpi-perf__total-row">
                       <td><strong>Tổng</strong></td>
+                      <td></td>
                       {(() => {
                         const totTgt = filteredPerf.reduce((s, r) => s + (perfQuarter === 'all'
                           ? (['q1', 'q2', 'q3', 'q4'] as const).reduce((qs, q) => qs + r.quarters[q].effective, 0)

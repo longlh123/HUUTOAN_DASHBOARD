@@ -121,6 +121,10 @@ function TeamView({ report }: { report: DailyReport }) {
     <table className="leaderboard">
       <TableHead quarter={report.quarter} entityLabel="Team" />
       <tbody>
+        <tr className="leaderboard__grand-total">
+          <td colSpan={2}>Tổng cộng</td>
+          <MetricCells m={sumGroup(report.teams)} />
+        </tr>
         {grouped.map(([dept, teams]) => (
           <Fragment key={dept}>
             <tr className="leaderboard__dept-header">
@@ -152,6 +156,10 @@ function RepView({ report }: { report: RepDailyReport }) {
     <table className="leaderboard">
       <TableHead quarter={report.quarter} entityLabel="Salesperson" />
       <tbody>
+        <tr className="leaderboard__grand-total">
+          <td colSpan={2}>Tổng cộng</td>
+          <MetricCells m={sumGroup(report.reps)} />
+        </tr>
         {grouped.map(([dept, deptReps]) => (
           <Fragment key={dept}>
             <tr className="leaderboard__dept-header">

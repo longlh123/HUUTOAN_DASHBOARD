@@ -53,6 +53,8 @@ class KpiController extends Controller
             'crc83_ab_q4'              => $v['q4'] ?? 0,
         ]);
 
+        $this->sales->invalidateKpiTargetsCache($v['year']);
+
         return $this->success([
             'id'          => $v['crm_user_id'],
             'crm_user_id' => $v['crm_user_id'],
@@ -84,6 +86,8 @@ class KpiController extends Controller
             'crc83_ab_q4' => $v['q4'] ?? 0,
         ]);
 
+        $this->sales->invalidateKpiTargetsCache($v['year']);
+
         $raw = $this->crm->get("crc83_kpitargetses({$altKey})", [
             '$select' => 'crc83_ab_year,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4,_crc83_ab_user_value',
         ]);
@@ -103,6 +107,7 @@ class KpiController extends Controller
         $altKey = "_crc83_ab_user_value={$id},crc83_ab_year={$year}";
 
         $this->crm->delete('crc83_kpitargetses', $altKey);
+        $this->sales->invalidateKpiTargetsCache($year);
 
         return $this->success(null);
     }
