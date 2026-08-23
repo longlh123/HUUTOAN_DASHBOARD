@@ -2,19 +2,20 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\ServiceProvider;
 use App\Services\Crm\CrmApiService;
 use App\Services\Crm\CrmTokenService;
 use App\Services\Crm\DeviceService;
 use App\Services\Crm\SalesPerformanceService;
 use App\Services\Erp\CostService;
 use App\Services\Erp\ErpApiService;
+use App\Services\Erp\ErpSalesAttributionService;
 use App\Services\Erp\ErpTokenService;
 use App\Services\Erp\FinanceService;
 use App\Services\Invoice\InvoiceImportService;
-use SocialiteProviders\Manager\SocialiteWasCalled;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\ServiceProvider;
 use SocialiteProviders\Azure\AzureExtendSocialite;
+use SocialiteProviders\Manager\SocialiteWasCalled;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -30,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(ErpTokenService::class);
         $this->app->singleton(ErpApiService::class);
         $this->app->singleton(FinanceService::class);
+        $this->app->singleton(ErpSalesAttributionService::class);
         $this->app->singleton(CostService::class);
         $this->app->singleton(InvoiceImportService::class);
     }

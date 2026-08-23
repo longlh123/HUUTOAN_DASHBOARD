@@ -34,6 +34,12 @@ class WarmSalesCache extends Command
             $this->sales->byTeam($currentFrom, $currentTo, $territory, null);
             $this->sales->byTeam($prevFrom, $prevTo, $territory, null);
             $this->sales->weeklyDeals(0, $territory, null);
+
+            // dailyReport() goi rieng byTeam(quy) + teamKpiPerformance() (fetch ca nam) ma 2 dong
+            // byTeam() o tren khong cover — warm luon o day de tranh cold-fetch ~85s khi user mo
+            // trang Daily Report (xem SalesPerformanceService::yearEnd() — da can chinh moc "to"
+            // de fetch nam nay trung cache voi byTeam($currentFrom, $currentTo, ...) o tren).
+            $this->sales->dailyReport($territory, null);
         }
 
         $this->info('Done.');

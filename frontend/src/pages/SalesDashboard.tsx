@@ -173,6 +173,11 @@ export function SalesDashboard() {
               ))}
             </div>
           )}
+          {isAdmin && allDepartments.length > 0 && (
+            <p className="dashboard__source-note">
+              NNC &amp; SS: theo hoá đơn ERP · các team khác: theo CRM
+            </p>
+          )}
         </div>
       </div>
 
