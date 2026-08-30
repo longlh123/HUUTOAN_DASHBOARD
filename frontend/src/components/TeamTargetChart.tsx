@@ -8,7 +8,7 @@ const COLORS = ['#C8102E', '#3b82f6', '#0d9488', '#f97316', '#8b5cf6', '#ec4899'
 type DeptItem = { name: string; actual: number; target: number; fill: string }
 type PieItem  = { name: string; value: number; fill: string; pct?: number }
 
-type Props = { data: TeamData[]; loading: boolean; department?: string }
+type Props = { data: TeamData[]; loading: boolean; department?: string; companyTarget?: number | null }
 
 function pctColor(pct: number): string {
   if (pct >= 100) return '#16a34a'
@@ -16,7 +16,7 @@ function pctColor(pct: number): string {
   return '#dc2626'
 }
 
-export function TeamTargetChart({ data, loading, department }: Props) {
+export function TeamTargetChart({ data, loading, department, companyTarget }: Props) {
   // Khi đã lọc theo 1 department cụ thể, mọi dòng đều cùng department nên group theo
   // department không còn ý nghĩa — group theo team (business unit) bên trong department đó.
   const depts = useMemo((): DeptItem[] => {
@@ -35,7 +35,10 @@ export function TeamTargetChart({ data, loading, department }: Props) {
   }, [data, department])
 
   const totalActual = depts.reduce((s, d) => s + d.actual, 0)
-  const totalTarget = depts.reduce((s, d) => s + d.target, 0)
+  // Xem "ALL" (không lọc department) → dùng thẳng target tổng công ty (kpi_company_targets),
+  // không cộng dồn target từng team nữa (team có thể chưa nhập đủ, làm số lệch khỏi target thật).
+  // Đã lọc theo 1 department cụ thể → vẫn cộng target của các team trong department đó (đúng cũ).
+  const totalTarget = department ? depts.reduce((s, d) => s + d.target, 0) : (companyTarget ?? 0)
   const overallPct  = totalTarget > 0 ? Math.round(totalActual / totalTarget * 100) : null
 
   // Toàn bộ cung = target; từng dept chiếm actual/target của cung; phần xám = còn lại

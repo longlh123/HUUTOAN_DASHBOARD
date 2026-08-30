@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, KpiQuarterly, OppQualityRow, OppQualityDetailRow, DateRange, GroupBy } from '../api/sales'
-import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchOppQuality, fetchOppQualityDetail } from '../api/sales'
+import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, KpiQuarterly, KpiCompanyTarget, OppQualityRow, OppQualityDetailRow, DateRange, GroupBy } from '../api/sales'
+import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchOppQuality, fetchOppQualityDetail, fetchKpiCompanyTarget } from '../api/sales'
 import { getPresetRange, prevYearRange } from '../utils/date'
 import { KpiCards } from '../components/KpiCards'
 import { RevenueChart } from '../components/RevenueChart'
@@ -37,6 +37,7 @@ export function SalesDashboard() {
   const [prevPeriodData, setPrevPeriodData] = useState<PeriodData[]>([])
   const [teamData,       setTeamData]       = useState<TeamData[]>([])
   const [kpiQuarterly,   setKpiQuarterly]   = useState<KpiQuarterly | null>(null)
+  const [companyTarget,  setCompanyTarget]  = useState<KpiCompanyTarget | null>(null)
   const [loading,        setLoading]        = useState(true)
   const [fetching,       setFetching]       = useState(false)
   const [error,          setError]          = useState<string | null>(null)
@@ -86,6 +87,13 @@ export function SalesDashboard() {
       .catch((e: Error) => setError(e.message))
       .finally(() => { setLoading(false); setFetching(false) })
   }, [range, groupBy, territory, department])
+
+  // Target tổng công ty — dùng làm mẫu số cho gauge "Department vs. Target năm" khi xem ALL
+  // (không lọc department), độc lập với range/groupBy đang chọn.
+  useEffect(() => {
+    const year = parseInt(range.from.slice(0, 4))
+    fetchKpiCompanyTarget(year).then(setCompanyTarget).catch(() => {})
+  }, [range])
 
   useEffect(() => {
     if (!pipelineVisited) return
@@ -193,7 +201,7 @@ export function SalesDashboard() {
           <RevenueChart data={periodData} prevData={prevPeriodData} loading={loading} groupBy={groupBy} quarterlyTargets={kpiQuarterly ?? undefined} />
           <div className="row-2col">
             <WeeklyWonChart territory={territory} department={department} />
-            <TeamTargetChart data={teamData} loading={loading} department={department} />
+            <TeamTargetChart data={teamData} loading={loading} department={department} companyTarget={companyTarget?.target_amount ?? null} />
           </div>
           <SalesTeamLeaderboard territory={territory} department={department} range={range} />
           <SalesLeaderboard territory={territory} department={department} range={range} />

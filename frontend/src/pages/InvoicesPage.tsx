@@ -1,15 +1,83 @@
 import { useEffect, useRef, useState } from 'react'
+import ExcelJS from 'exceljs'
 import type { Invoice, InvoiceImportResult } from '../api/invoices'
 import { fetchInvoices, importInvoices, updateInvoiceNote } from '../api/invoices'
 import { fmtVNDFull } from '../utils/format'
 
 const PAGE_SIZE = 20
+const EXPORT_HEADERS   = ['TT', 'Loại tài liệu', 'Tài liệu số', 'Ngày lập', 'Ngày ký', 'Đơn vị lập', 'MST', 'Ký hiệu', 'Nội dung', 'Ghi Chú', 'Số tiền trên hóa đơn']
+const EXPORT_SUBLABELS = ['', '', 'Số hóa đơn', 'Ngày hóa đơn', 'Ngày hóa đơn', 'Tên nhà cung cấp (tên bên bán)', 'MST bên bán', 'Ký hiệu hóa đơn', 'Nội dung hóa đơn', 'Ghi chú trên hóa đơn', 'Số tiền tổng trên hóa đơn']
+const EXPORT_COL_WIDTHS = [5, 12, 12, 12, 12, 36, 14, 12, 40, 20, 18]
 
 function fmtDate(s: string | null): string {
   if (!s) return '—'
   const d = new Date(s)
   if (Number.isNaN(d.getTime())) return '—'
   return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+}
+
+function fmtDateForExport(s: string | null): string {
+  if (!s) return ''
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`
+}
+
+const THIN_BORDER = { style: 'thin' as const, color: { argb: 'FF000000' } }
+
+async function exportInvoicesExcel(from: string, to: string, search: string) {
+  const { data } = await fetchInvoices({
+    from: from || undefined, to: to || undefined, search: search || undefined,
+    page: 1, per_page: 5000,
+  })
+
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('Bảng kê')
+  ws.columns = EXPORT_COL_WIDTHS.map(width => ({ width }))
+
+  ws.mergeCells(1, 1, 1, EXPORT_HEADERS.length)
+  const titleCell = ws.getCell(1, 1)
+  titleCell.value = 'BẢNG KÊ TÀI LIỆU CHỨNG MINH MỤC ĐÍCH SỬ DỤNG VỐN VAY'
+  titleCell.font = { bold: true, size: 13 }
+
+  EXPORT_SUBLABELS.forEach((label, i) => {
+    const cell = ws.getCell(2, i + 1)
+    cell.value = label
+    cell.font = { color: { argb: 'FFFF0000' }, italic: true }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+  })
+
+  EXPORT_HEADERS.forEach((label, i) => {
+    const cell = ws.getCell(3, i + 1)
+    cell.value = label
+    cell.font = { bold: true }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    cell.border = { top: THIN_BORDER, left: THIN_BORDER, bottom: THIN_BORDER, right: THIN_BORDER }
+  })
+
+  data.forEach((inv, idx) => {
+    const rowIdx = 4 + idx
+    const values = [
+      idx + 1, 'Hóa đơn', inv.invoice_number, fmtDateForExport(inv.issue_date), fmtDateForExport(inv.signed_date),
+      inv.seller_name ?? '', inv.seller_tax_code ?? '', inv.invoice_symbol ?? '',
+      inv.content_summary ?? '', inv.note ?? '', inv.total_payment ?? 0,
+    ]
+    values.forEach((v, i) => {
+      const cell = ws.getCell(rowIdx, i + 1)
+      cell.value = v
+      cell.border = { top: THIN_BORDER, left: THIN_BORDER, bottom: THIN_BORDER, right: THIN_BORDER }
+      if (i === EXPORT_HEADERS.length - 1) cell.numFmt = '#,##0'
+    })
+  })
+
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob   = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url    = URL.createObjectURL(blob)
+  const a      = document.createElement('a')
+  a.href       = url
+  a.download   = `bang-ke-hoa-don${from ? `-${from}` : ''}${to ? `_${to}` : ''}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export function InvoicesPage() {
@@ -25,6 +93,7 @@ export function InvoicesPage() {
 
   const [importing,    setImporting]    = useState(false)
   const [importResult, setImportResult] = useState<InvoiceImportResult | null>(null)
+  const [exporting,    setExporting]    = useState(false)
 
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -74,6 +143,17 @@ export function InvoicesPage() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await exportInvoicesExcel(from, to, search)
+    } catch (err) {
+      setError((err as Error).message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   async function saveNote(id: number, note: string) {
     setRows(prev => prev.map(r => r.id === id ? { ...r, note } : r))
     try {
@@ -88,7 +168,14 @@ export function InvoicesPage() {
       <div className="dashboard__header" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <h1 className="dashboard__title">Bảng kê hóa đơn</h1>
-          <div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="kpi-settings__export-btn"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              {exporting ? 'Đang xuất...' : 'Xuất Excel'}
+            </button>
             <input
               ref={folderInputRef}
               type="file"
@@ -113,7 +200,7 @@ export function InvoicesPage() {
           <input
             type="search"
             className="kpi-settings__input"
-            placeholder="Tìm số HĐ, tên/MST bên bán..."
+            placeholder="Tìm số HĐ (nhiều số cách nhau bằng dấu phẩy), tên/MST bên bán..."
             value={search}
             onChange={e => { setSearch(e.target.value); resetPage() }}
             style={{ width: 260, textAlign: 'left' }}

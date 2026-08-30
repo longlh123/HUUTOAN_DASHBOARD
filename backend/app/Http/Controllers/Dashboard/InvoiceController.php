@@ -33,34 +33,42 @@ class InvoiceController extends Controller
             $query->whereDate('issue_date', '<=', $to);
         }
         if ($search = $request->query('search')) {
-            $query->where(function ($q) use ($search) {
-                $q->where('invoice_number', 'like', "%{$search}%")
-                    ->orWhere('seller_name', 'like', "%{$search}%")
-                    ->orWhere('seller_tax_code', 'like', "%{$search}%");
-            });
+            if (str_contains($search, ',')) {
+                // Nhieu so hoa don cach nhau boi dau phay -> tim dung khop tung so, chi tren cot invoice_number
+                $numbers = array_values(array_filter(array_map('trim', explode(',', $search))));
+                $query->whereIn('invoice_number', $numbers);
+            } else {
+                $query->where(function ($q) use ($search) {
+                    $q->where('invoice_number', 'like', "%{$search}%")
+                        ->orWhere('seller_name', 'like', "%{$search}%")
+                        ->orWhere('seller_tax_code', 'like', "%{$search}%");
+                });
+            }
         }
 
         $perPage = (int) $request->query('per_page', 20);
-        $page    = $query->paginate($perPage);
+        $page = $query->paginate($perPage);
 
         return $this->success($page->items(), [
-            'total'        => $page->total(),
+            'total' => $page->total(),
             'current_page' => $page->currentPage(),
-            'last_page'    => $page->lastPage(),
+            'last_page' => $page->lastPage(),
         ]);
     }
 
     public function import(Request $request): JsonResponse
     {
         $request->validate([
-            'files'   => 'required|array|min:1',
+            'files' => 'required|array|min:1',
             'files.*' => 'file',
         ]);
 
         $paths = [];
         $names = [];
         foreach ($request->file('files') as $file) {
-            if (strtolower($file->getClientOriginalExtension()) !== 'zip') continue;
+            if (strtolower($file->getClientOriginalExtension()) !== 'zip') {
+                continue;
+            }
             $paths[] = $file->getRealPath();
             $names[] = $file->getClientOriginalName();
         }

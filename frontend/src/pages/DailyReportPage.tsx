@@ -10,6 +10,8 @@ function pctColor(pct: number | null): string {
   return '#dc2626'
 }
 
+const DEPT_ORDER = ['B2B', 'NNC', 'SS', 'OEM']
+
 function groupByDepartment<T extends { department: string }>(rows: T[]): [string, T[]][] {
   const map = new Map<string, T[]>()
   for (const r of rows) {
@@ -17,7 +19,11 @@ function groupByDepartment<T extends { department: string }>(rows: T[]): [string
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(r)
   }
-  return Array.from(map.entries())
+  return Array.from(map.entries()).sort(([a], [b]) => {
+    const ia = DEPT_ORDER.indexOf(a)
+    const ib = DEPT_ORDER.indexOf(b)
+    return (ia === -1 ? DEPT_ORDER.length : ia) - (ib === -1 ? DEPT_ORDER.length : ib)
+  })
 }
 
 function groupByTeam(rows: DailyReportRepRow[]): [string, DailyReportRepRow[]][] {
@@ -33,13 +39,14 @@ function groupByTeam(rows: DailyReportRepRow[]): [string, DailyReportRepRow[]][]
 function sumGroup(rows: ReportMetrics[]) {
   const day_count  = rows.reduce((s, t) => s + t.day_count, 0)
   const day_value  = rows.reduce((s, t) => s + t.day_value, 0)
+  const week_count = rows.reduce((s, t) => s + t.week_count, 0)
   const week_value = rows.reduce((s, t) => s + t.week_value, 0)
   const accu_q     = rows.reduce((s, t) => s + t.accu_q, 0)
   const target_q   = rows.reduce((s, t) => s + t.target_q, 0)
   const accu_fy    = rows.reduce((s, t) => s + t.accu_fy, 0)
   const target_fy  = rows.reduce((s, t) => s + t.target_fy, 0)
   return {
-    day_count, day_value, week_value, accu_q, target_q, accu_fy, target_fy,
+    day_count, day_value, week_count, week_value, accu_q, target_q, accu_fy, target_fy,
     pct_q:  target_q  > 0 ? Math.round((accu_q  / target_q)  * 1000) / 10 : null,
     pct_fy: target_fy > 0 ? Math.round((accu_fy / target_fy) * 1000) / 10 : null,
   }

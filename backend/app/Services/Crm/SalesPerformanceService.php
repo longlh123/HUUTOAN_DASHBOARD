@@ -2,6 +2,8 @@
 
 namespace App\Services\Crm;
 
+use App\Models\KpiTarget;
+use App\Models\KpiTeamTarget;
 use App\Services\Erp\ErpSalesAttributionService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -130,64 +132,31 @@ class SalesPerformanceService
             ->values();
     }
 
+    // Target quy cho RevenueChart — cong don target THEO TUNG QUY cua cac team, co ap dung rollover
+    // giong het kpiPerformance() nhung o cap TEAM (dung target rieng cua team trong kpi_team_targets,
+    // khong con suy tu tong ca nhan): quy da ket thuc ma team khong dat target
+    // thi phan thieu duoc cong sang target quy ke tiep cua chinh team do. Dang loc "ALL" thi cong het
+    // cac team; dang loc 1 department cu the thi chi cong cac team thuoc department do.
     public function kpiQuarterlyTotals(int $year, ?string $territory = null, ?string $department = null): array
     {
-        $scopedIds = $this->fetchUsers()
-            ->filter(fn ($u) => (! $territory || strtoupper($territory) === 'ALL' ||
-                    strtoupper($u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '') === strtoupper($territory)) &&
-                (! $department ||
-                    ($u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '') === $department)
-            )
-            ->keys()
-            ->flip()
-            ->toArray();
+        $teamRows = $this->teamQuarterlyEffective($year, $territory);
 
-        if (empty($scopedIds)) {
-            return ['q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0];
+        $isAll = ! $department || strtoupper($department) === 'ALL';
+        if (! $isAll) {
+            $teamIds = $this->fetchUsers()
+                ->filter(fn ($u) => ($u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '') === $department)
+                ->pluck('_businessunitid_value')
+                ->filter()
+                ->unique()
+                ->flip();
+
+            $teamRows = $teamRows->filter(fn ($t) => $teamIds->has($t['team_id']));
         }
-
-        $targets = collect($this->api->get('crc83_kpitargetses', [
-            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
-            '$filter' => "crc83_ab_year eq {$year}",
-        ], ttl: 3600)['value'] ?? [])
-            ->filter(fn ($t) => isset($scopedIds[$t['_crc83_ab_user_value'] ?? '']));
-
-        if ($targets->isEmpty()) {
-            return ['q1' => 0, 'q2' => 0, 'q3' => 0, 'q4' => 0];
-        }
-
-        $from = Carbon::create($year, 1, 1)->startOfDay();
-        $to = $this->yearEnd($year);
-
-        $allWonQuotes = $this->wonDealsFor($from, $to);
-
-        $actualByOwner = $allWonQuotes
-            ->filter(fn ($q) => isset($scopedIds[$q['_ownerid_value'] ?? '']))
-            ->groupBy('_ownerid_value')
-            ->map(fn ($ownerQuotes) => $ownerQuotes
-                ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
-                ->map(fn ($qQuotes) => (float) $this->calcOppValue($qQuotes)->sum('resolved_value'))
-            );
-
-        $now = now();
-        $currentYear = $now->year;
-        $currentQuarter = $now->quarter;
 
         $totals = ['q1' => 0.0, 'q2' => 0.0, 'q3' => 0.0, 'q4' => 0.0];
-
-        foreach ($targets as $target) {
-            $userId = $target['_crc83_ab_user_value'] ?? '';
-            $actuals = $actualByOwner->get($userId, collect());
-            $rollover = 0.0;
-
+        foreach ($teamRows as $t) {
             foreach ([1, 2, 3, 4] as $q) {
-                $original = (float) ($target["crc83_ab_q{$q}"] ?? 0);
-                $effective = $original + $rollover;
-                $actual = (float) $actuals->get($q, 0);
-                $quarterEnded = $year < $currentYear || ($year === $currentYear && $q < $currentQuarter);
-                $rollover = $quarterEnded ? max(0.0, $effective - $actual) : 0.0;
-
-                $totals["q{$q}"] += $effective;
+                $totals["q{$q}"] += $t['target_q'][$q] ?? 0;
             }
         }
 
@@ -199,27 +168,93 @@ class SalesPerformanceService
         ];
     }
 
-    // kpiQuarterlyTotals/kpiByRep/kpiByTeam/teamKpiPerformance đều gọi crc83_kpitargetses
-    // với đúng 1 bộ $select/$filter này (theo year) nên chia sẻ chung 1 cache key (ttl 3600s) —
-    // gọi hàm này sau khi tạo/sửa/xoá KPI target để invalidate hết 4 chỗ cùng lúc, tránh
-    // Daily Report/Performance tab hiển thị số cũ tới khi cache tự hết hạn.
-    public function invalidateKpiTargetsCache(int $year): void
+    /**
+     * Target hieu qua (effective, co rollover) theo tung quy cho tung team — dung rieng target cua
+     * team trong kpi_team_targets doi chieu voi doanh so THAT cua ca team (khong phai cong tu target
+     * ca nhan nua). Rollover chi tinh khi quy da ket thuc: shortfall = max(0, effective - actual).
+     * target_year tra ve la TONG GOC (khong cong rollover) — dung cho pct_fy o dailyReport(), giu
+     * dung nguyen tac "annual total khong phinh so vi rollover" nhu kpiPerformance()/target_year cu.
+     *
+     * @return Collection<int, array{team_id: string, name: string, target_q: array<int,float>, target_year: float}>
+     */
+    private function teamQuarterlyEffective(int $year, ?string $territory = null): Collection
     {
-        $this->api->forget('crc83_kpitargetses', [
-            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
-            '$filter' => "crc83_ab_year eq {$year}",
+        $teamTargets = KpiTeamTarget::where('year', $year)->get();
+        if ($teamTargets->isEmpty()) {
+            return collect();
+        }
+
+        $from = Carbon::create($year, 1, 1)->startOfDay();
+        $to = $this->yearEnd($year);
+        $wonQuotes = $this->wonDealsFor($from, $to, $territory);
+
+        // Group theo owner truoc roi calcOppValue per-owner (giong byTeam()) — tranh de-duplicate
+        // opp nham khi calcOppValue chay thang tren ca team gom nhieu owner.
+        $actualByTeamQuarter = $wonQuotes
+            ->groupBy('_owningbusinessunit_value')
+            ->map(function ($teamQuotes) {
+                $memberOppRows = $teamQuotes->groupBy('_ownerid_value')
+                    ->flatMap(fn ($memberQuotes) => $this->calcOppValue($memberQuotes)->all());
+
+                return $memberOppRows
+                    ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
+                    ->map(fn ($qRows) => (float) $qRows->sum('resolved_value'));
+            });
+
+        $now = now();
+        $currentYear = $now->year;
+        $currentQuarter = $now->quarter;
+
+        return $teamTargets->map(function ($t) use ($actualByTeamQuarter, $year, $currentYear, $currentQuarter) {
+            $actuals = $actualByTeamQuarter->get($t->team_id, collect());
+            $rollover = 0.0;
+            $effective = [];
+            $raw = 0.0;
+
+            foreach ([1, 2, 3, 4] as $q) {
+                $original = (float) $t->{"q{$q}"};
+                $eff = $original + $rollover;
+                $actual = (float) $actuals->get($q, 0);
+                $quarterEnded = $year < $currentYear || ($year === $currentYear && $q < $currentQuarter);
+                $rollover = $quarterEnded ? max(0.0, $eff - $actual) : 0.0;
+
+                $effective[$q] = $eff;
+                $raw += $original;
+            }
+
+            return [
+                'team_id' => $t->team_id,
+                'name' => $t->team_name,
+                'target_q' => $effective,
+                'target_year' => $raw,
+            ];
+        })->values();
+    }
+
+    // KPI target ca nhan gio doc thang tu MySQL (kpi_member_targets, khong qua CRM nua) — tra ve
+    // shape giong het CRM crc83_kpitargetses cu (_crc83_ab_user_value, crc83_ab_q1..q4 + annotation
+    // ten) de logic rollover cap ca nhan (kpiByRep/kpiPerformance/quarterlyGapChart) khong phai sua
+    // lai. kpiQuarterlyTotals/kpiByTeam gio doc thang KpiTeamTarget, khong qua ham nay nua.
+    private function fetchKpiTargetsRaw(int $year): Collection
+    {
+        return KpiTarget::where('year', $year)->get()->map(fn ($t) => [
+            '_crc83_ab_user_value' => $t->crm_user_id,
+            '_crc83_ab_user_value@OData.Community.Display.V1.FormattedValue' => $t->user_name,
+            // Team ma target NAY duoc tinh vao — luu tren chinh row target, khong join song
+            // qua CRM team cua nguoi giu target (target co the da duoc chuyen cho nguoi khac team).
+            'team_id' => $t->team_id,
+            'team_name' => $t->team_name,
+            'crc83_ab_q1' => $t->q1,
+            'crc83_ab_q2' => $t->q2,
+            'crc83_ab_q3' => $t->q3,
+            'crc83_ab_q4' => $t->q4,
         ]);
     }
 
     // KPI target theo từng user (owner_id) cho các quý trong date range
     private function kpiByRep(int $year): Collection
     {
-        $targetsRaw = $this->api->get('crc83_kpitargetses', [
-            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
-            '$filter' => "crc83_ab_year eq {$year}",
-        ], ttl: 3600);
-
-        return collect($targetsRaw['value'] ?? [])
+        return $this->fetchKpiTargetsRaw($year)
             ->keyBy(fn ($t) => $t['_crc83_ab_user_value'] ?? '')
             ->filter(fn ($_, $userId) => $userId !== '')
             ->map(fn ($t) => (int) round((float) ($t['crc83_ab_q1'] ?? 0) + (float) ($t['crc83_ab_q2'] ?? 0)
@@ -236,7 +271,7 @@ class SalesPerformanceService
     {
         $wonQuotes = $this->wonDealsFor($from, $to, $territory, $department);
         $users = $this->fetchUsers();
-        $kpiByTeam = $this->kpiByTeam($users, $from->year);
+        $kpiByTeam = $this->kpiByTeam($from->year);
 
         // Group by team FIRST — mỗi team tính calcOppValue trên quotes của chính team
         $wonByTeam = $wonQuotes->groupBy('_owningbusinessunit_value');
@@ -300,23 +335,14 @@ class SalesPerformanceService
             ->values();
     }
 
-    // KPI target cả năm theo team — sum Q1+Q2+Q3+Q4 của tất cả user trong team
-    private function kpiByTeam(Collection $users, int $year): Collection
+    // KPI target cả năm theo team — đọc thẳng target team đã nhập ở KPI Settings (kpi_team_targets),
+    // KHÔNG cộng dồn target cá nhân của từng thành viên nữa (đổi target 1 cá nhân không còn làm
+    // lệch số của cả team — đúng yêu cầu tách 3 tầng công ty/team/cá nhân độc lập).
+    private function kpiByTeam(int $year): Collection
     {
-        $targetsRaw = $this->api->get('crc83_kpitargetses', [
-            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
-            '$filter' => "crc83_ab_year eq {$year}",
-        ], ttl: 3600);
-
-        $userToTeam = $users->mapWithKeys(fn ($u, $id) => [$id => $u['_businessunitid_value'] ?? '']);
-
-        return collect($targetsRaw['value'] ?? [])
-            ->groupBy(fn ($t) => $userToTeam->get($t['_crc83_ab_user_value'] ?? '') ?? '')
-            ->filter(fn ($_, $teamId) => $teamId !== '')
-            ->map(fn ($teamTargets) => (int) round($teamTargets->sum(fn ($t) => (float) ($t['crc83_ab_q1'] ?? 0) + (float) ($t['crc83_ab_q2'] ?? 0)
-                    + (float) ($t['crc83_ab_q3'] ?? 0) + (float) ($t['crc83_ab_q4'] ?? 0)
-            ))
-            );
+        return KpiTeamTarget::where('year', $year)->get()
+            ->keyBy('team_id')
+            ->map(fn ($t) => (int) round($t->q1 + $t->q2 + $t->q3 + $t->q4));
     }
 
     public function topAccounts(Carbon $from, Carbon $to, ?string $territory = null, ?string $department = null): array
@@ -468,7 +494,7 @@ class SalesPerformanceService
 
         $accuQByTeam = $this->byTeam($qStart, $qEnd, $territory, null)->keyBy('name');
         $accuFyByTeam = $this->byTeam($yStart, $yEnd, $territory, null)->keyBy('name');
-        $targetByTeam = collect($this->teamKpiPerformance($year, $territory))->keyBy('name');
+        $targetByTeam = $this->teamQuarterlyEffective($year, $territory)->keyBy('name');
 
         $teamNames = $dayByTeam->keys()
             ->merge($weekByTeam->keys())
@@ -494,6 +520,7 @@ class SalesPerformanceService
                 'department' => $department,
                 'day_count' => $dayTeamDeals->count(),
                 'day_value' => (float) $dayTeamDeals->sum('resolved_value'),
+                'week_count' => $weekTeamDeals->count(),
                 'week_value' => (float) $weekTeamDeals->sum('resolved_value'),
                 'accu_q' => $accuQ,
                 'target_q' => $targetQ,
@@ -591,6 +618,7 @@ class SalesPerformanceService
                 'department' => $department,
                 'day_count' => $dayOwnerDeals->count(),
                 'day_value' => (float) $dayOwnerDeals->sum('resolved_value'),
+                'week_count' => $weekOwnerDeals->count(),
                 'week_value' => (float) $weekOwnerDeals->sum('resolved_value'),
                 'accu_q' => $accuQ,
                 'target_q' => $targetQ,
@@ -713,13 +741,7 @@ class SalesPerformanceService
         $from = Carbon::create($year, 1, 1)->startOfDay();
         $to = $this->yearEnd($year);
 
-        // Targets từ CRM
-        $targetsRaw = $this->api->get('crc83_kpitargetses', [
-            '$select' => 'crc83_ab_year,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4,_crc83_ab_user_value',
-            '$filter' => "crc83_ab_year eq {$year}",
-        ]);
-
-        $targets = collect($targetsRaw['value'] ?? [])
+        $targets = $this->fetchKpiTargetsRaw($year)
             ->keyBy(fn ($r) => $r['_crc83_ab_user_value'] ?? '');
 
         if ($targets->isEmpty()) {
@@ -770,88 +792,6 @@ class SalesPerformanceService
                 'quarters' => $quarters,
             ];
         })->values()->toArray();
-    }
-
-    /**
-     * Target da rollover (effective) cua tung quy, group theo team — dung logic rollover
-     * giong het kpiPerformance() nhung tinh per-user roi cong don vao team thay vi tra rieng
-     * tung nguoi, de % o dailyReport() khop voi tab Hieu suat.
-     *
-     * @return array<int, array{team_id: string, name: string, target_q: array<int,float>, target_year: float}>
-     */
-    private function teamKpiPerformance(int $year, ?string $territory = null): array
-    {
-        $users = $this->fetchUsers()->filter(fn ($u) => ! $territory || strtoupper($territory) === 'ALL' ||
-            strtoupper($u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '') === strtoupper($territory)
-        );
-
-        $userToTeam = $users->mapWithKeys(fn ($u, $id) => [$id => [
-            'id' => $u['_businessunitid_value'] ?? '',
-            'name' => $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] ?? '',
-        ]]);
-
-        $targets = collect($this->api->get('crc83_kpitargetses', [
-            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
-            '$filter' => "crc83_ab_year eq {$year}",
-        ], ttl: 3600)['value'] ?? [])
-            ->filter(fn ($t) => $userToTeam->has($t['_crc83_ab_user_value'] ?? ''));
-
-        if ($targets->isEmpty()) {
-            return [];
-        }
-
-        $from = Carbon::create($year, 1, 1)->startOfDay();
-        $to = $this->yearEnd($year);
-
-        $allWonQuotes = $this->wonDealsFor($from, $to, $territory);
-
-        $actualByOwner = $allWonQuotes
-            ->groupBy('_ownerid_value')
-            ->map(fn ($ownerQuotes) => $ownerQuotes
-                ->groupBy(fn ($q) => Carbon::parse($q['closedon'])->quarter)
-                ->map(fn ($qQuotes) => (float) $this->calcOppValue($qQuotes)->sum('resolved_value'))
-            );
-
-        $now = now();
-        $currentYear = $now->year;
-        $currentQuarter = $now->quarter;
-
-        $teams = [];
-
-        foreach ($targets as $target) {
-            $userId = $target['_crc83_ab_user_value'] ?? '';
-            $team = $userToTeam->get($userId);
-            if (! $team || ! $team['id']) {
-                continue;
-            }
-
-            $teamId = $team['id'];
-            $teams[$teamId] ??= ['name' => $team['name'], 'target' => [1 => 0.0, 2 => 0.0, 3 => 0.0, 4 => 0.0], 'target_raw' => 0.0];
-
-            $actuals = $actualByOwner->get($userId, collect());
-            $rollover = 0.0;
-
-            foreach ([1, 2, 3, 4] as $q) {
-                $original = (float) ($target["crc83_ab_q{$q}"] ?? 0);
-                $effective = $original + $rollover;
-                $actual = (float) $actuals->get($q, 0);
-                $quarterEnded = $year < $currentYear || ($year === $currentYear && $q < $currentQuarter);
-                $rollover = $quarterEnded ? max(0.0, $effective - $actual) : 0.0;
-
-                $teams[$teamId]['target'][$q] += $effective;
-                $teams[$teamId]['target_raw'] += $original;
-            }
-        }
-
-        // target_year = tong target GOC (khong cong rollover) — rollover chi de doi chieu
-        // tung quy so voi actual, khong duoc lam phinh tong target ca nam so voi con so
-        // that su nhap trong KPI Settings (vd B2B dat 210 ty/nam thi phai ra dung 210 ty).
-        return collect($teams)->map(fn ($t, $id) => [
-            'team_id' => $id,
-            'name' => $t['name'],
-            'target_q' => $t['target'],
-            'target_year' => $t['target_raw'],
-        ])->values()->all();
     }
 
     public function pipeline(?string $territory = null, ?string $department = null): array
@@ -1014,10 +954,7 @@ class SalesPerformanceService
             return array_map(fn ($q) => ['quarter' => "Q{$q}", 'target' => 0, 'actual' => 0, 'gap' => 0], [1, 2, 3, 4]);
         }
 
-        $targets = collect($this->api->get('crc83_kpitargetses', [
-            '$select' => '_crc83_ab_user_value,crc83_ab_q1,crc83_ab_q2,crc83_ab_q3,crc83_ab_q4',
-            '$filter' => "crc83_ab_year eq {$year}",
-        ], ttl: 3600)['value'] ?? [])
+        $targets = $this->fetchKpiTargetsRaw($year)
             ->filter(fn ($t) => isset($scopedIds[$t['_crc83_ab_user_value'] ?? '']));
 
         $from = Carbon::create($year, 1, 1)->startOfDay();
@@ -1222,7 +1159,7 @@ class SalesPerformanceService
         return $to->year < now()->year ? 86400 : 1800;
     }
 
-    // Moc "den cuoi nam" dung cho kpiQuarterlyTotals/kpiPerformance/teamKpiPerformance — nam da qua
+    // Moc "den cuoi nam" dung cho kpiPerformance/teamQuarterlyEffective — nam da qua
     // dung han 31/12 (co dinh, cache mai mai). Nam hien tai dung "now" thay vi 31/12 de trung
     // cache key voi byTeam($yStart, now, ...) ma dailyReport() da goi — tranh fetch trung 2 lan
     // cung 1 du lieu (Won quotes ca nam) chi vi moc "to" khac nhau vai giay/gio.
@@ -1386,6 +1323,12 @@ class SalesPerformanceService
         return $crmOnly->merge($erpDeals);
     }
 
+    // Bang chi tiet hoa don ERP (NNC/SS) de team doi chieu voi Sales — xem ErpSalesAttributionService::reconciliationRows()
+    public function erpReconciliation(Carbon $from, Carbon $to, ?string $department = null): Collection
+    {
+        return $this->erp->reconciliationRows($from, $to, $department);
+    }
+
     private function loadKpiConfig(): array
     {
         $path = storage_path('app/kpi.json');
@@ -1405,8 +1348,10 @@ class SalesPerformanceService
             ->filter(fn ($u) => ! str_starts_with(strtolower($u['fullname'] ?? ''), 'tester'))
             ->map(function ($u) {
                 $team = $u['_businessunitid_value@OData.Community.Display.V1.FormattedValue'] ?? '';
+                $teamId = $u['_businessunitid_value'] ?? '';
                 if (in_array($team, self::GENERIC_BUSINESS_UNITS)) {
                     $team = '';
+                    $teamId = '';
                 }
 
                 return [
@@ -1415,6 +1360,7 @@ class SalesPerformanceService
                     'territory' => $u['_ab_dim_territory_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
                     'department' => $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? '',
                     'team' => $team,
+                    'team_id' => $teamId,
                 ];
             })
             ->values()

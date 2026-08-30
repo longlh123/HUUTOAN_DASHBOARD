@@ -4,16 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class KpiTarget extends Model
+class KpiTeamTarget extends Model
 {
-    protected $table = 'kpi_member_targets';
-
     protected $fillable = [
-        'crm_user_id',
-        'user_name',
+        'year',
         'team_id',
         'team_name',
-        'year',
         'q1',
         'q2',
         'q3',

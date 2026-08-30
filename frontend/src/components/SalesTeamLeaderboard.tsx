@@ -140,6 +140,8 @@ export function SalesTeamLeaderboard({ territory, department, range }: Props) {
   )
 }
 
+const DEPT_ORDER = ['B2B', 'NNC', 'SS', 'OEM']
+
 function groupByDepartment(data: TeamData[]): [string, TeamData[]][] {
   const map = new Map<string, TeamData[]>()
   for (const team of data) {
@@ -147,7 +149,11 @@ function groupByDepartment(data: TeamData[]): [string, TeamData[]][] {
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(team)
   }
-  return Array.from(map.entries())
+  return Array.from(map.entries()).sort(([a], [b]) => {
+    const ia = DEPT_ORDER.indexOf(a)
+    const ib = DEPT_ORDER.indexOf(b)
+    return (ia === -1 ? DEPT_ORDER.length : ia) - (ib === -1 ? DEPT_ORDER.length : ib)
+  })
 }
 
 function rateLevel(rate: number): 'high' | 'mid' | 'low' {

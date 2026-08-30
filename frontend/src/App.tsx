@@ -4,6 +4,11 @@ import { useAuth } from './contexts/AuthContext'
 import { AppLayout } from './components/AppLayout'
 import { SalesDashboard } from './pages/SalesDashboard'
 import { DailyReportPage } from './pages/DailyReportPage'
+import { ReconciliationPage } from './pages/ReconciliationPage'
+import { ProjectTrackingPage } from './pages/ProjectTrackingPage'
+import { ProjectTimelinePage } from './pages/ProjectTimelinePage'
+import { WeeklyPulsePage } from './pages/WeeklyPulsePage'
+import { FinancePulsePage } from './pages/FinancePulsePage'
 import { ServicesDashboard } from './pages/ServicesDashboard'
 import { FinanceDashboard } from './pages/FinanceDashboard'
 import { KpiSettingsPage } from './pages/KpiSettingsPage'
@@ -46,9 +51,14 @@ export default function App() {
             </ProtectedRoute>
           }>
             <Route path="/dashboard/sales"    element={<SalesDashboard />} />
+            <Route path="/dashboard/sales/weekly-pulse" element={<WeeklyPulsePage />} />
             <Route path="/dashboard/sales/daily-report" element={<DailyReportPage />} />
+            <Route path="/dashboard/sales/reconciliation" element={<ReconciliationPage />} />
+            <Route path="/dashboard/sales/projects" element={<ProjectTrackingPage />} />
+            <Route path="/dashboard/sales/projects/:code" element={<ProjectTimelinePage />} />
             <Route path="/dashboard/services" element={<ServicesDashboard />} />
             <Route path="/dashboard/finance"   element={<FinanceDashboard />} />
+            <Route path="/dashboard/finance/weekly-pulse" element={<FinancePulsePage />} />
             <Route path="/dashboard/devices"  element={<DeviceDashboard />} />
             <Route path="/invoices"                element={<InvoicesPage />} />
             <Route path="/settings/kpi"            element={<KpiSettingsPage />} />

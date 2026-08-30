@@ -1503,10 +1503,11 @@ input  { font-family: inherit; }
 /* ── Combobox ────────────────────────────────────────────── */
 .combobox {
   position: relative;
-  display: inline-block;
+  display: block;
+  width: 100%;
 }
 
-.combobox .combobox__input { width: 200px; text-align: left; }
+.combobox .combobox__input { width: 100%; min-width: 260px; text-align: left; }
 
 .combobox__list {
   position: absolute;
@@ -1622,6 +1623,9 @@ input  { font-family: inherit; }
 .kpi-settings__save-btn:disabled { opacity: .5; cursor: default; }
 
 .kpi-settings__del-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border);
@@ -1639,6 +1643,25 @@ input  { font-family: inherit; }
 }
 
 .kpi-settings__del-btn:disabled { opacity: .5; cursor: default; }
+
+.kpi-settings__edit-btn {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.kpi-settings__edit-btn:hover:not(:disabled) {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.kpi-settings__edit-btn:disabled { opacity: .5; cursor: default; }
 
 .kpi-settings__new-row td { background: var(--accent-light); }
 
@@ -1736,6 +1759,419 @@ input  { font-family: inherit; }
 .kpi-settings__year-select:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+/* ── Weekly Pulse (trang tom tat hop giao ban) ────────────── */
+.pulse__meta {
+  font-size: 13px;
+  color: var(--text);
+  max-width: 640px;
+}
+
+.pulse__section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pulse__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.pulse__section-head-left {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.pulse__section-num {
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 12.5px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background: var(--accent-light);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.pulse__section-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.pulse__section-sub {
+  font-size: 12.5px;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.kpi-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.kpi-grid--5 { grid-template-columns: repeat(5, 1fr); }
+
+.kpi-delta-inline { font-weight: 700; }
+.kpi-delta-inline--up   { color: #16a34a; }
+.kpi-delta-inline--down { color: var(--accent); }
+
+/* ── Finance Pulse waterfall chart ─────────────────────────── */
+.pulse__wc-chart {
+  position: relative;
+  height: 220px;
+  padding: 8px 8px 0;
+}
+
+.pulse__wc-zero-line {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--border);
+}
+
+.pulse__wc-cols {
+  position: relative;
+  height: 100%;
+  display: flex;
+}
+
+.pulse__wc-col {
+  flex: 1;
+  position: relative;
+}
+
+.pulse__wc-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 52px;
+  border-radius: 5px;
+}
+.pulse__wc-bar--pos { background: #16a34a; }
+.pulse__wc-bar--neg { background: var(--accent); opacity: .8; }
+.pulse__wc-bar--net { background: var(--text-h); width: 58px; }
+
+.pulse__wc-bar-value {
+  position: absolute;
+  left: 50%;
+  font-family: monospace;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pulse__wc-cat-labels {
+  display: flex;
+  padding: 0 8px;
+  margin-top: 10px;
+}
+.pulse__wc-cat {
+  flex: 1;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 0 4px;
+}
+
+.pulse__narrative {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px;
+}
+.pulse__narrative-lead { font-size: 13.5px; color: var(--text-h); }
+.pulse__narrative-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--text);
+}
+.pulse__narrative-mark { color: var(--accent); font-weight: 700; line-height: 1.5; flex: none; }
+
+.pulse__row-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text);
+  font-weight: 400;
+  margin-top: 1px;
+}
+
+@media (max-width: 900px) {
+  .kpi-grid--5 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+  .kpi-grid--5 { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── P&L 6 key metrics (khoi block mau dam, giong slide P&L goc) ────── */
+.finance-metric-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.finance-metric-row + .finance-metric-row { margin-top: 6px; }
+
+.finance-metric-row__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.finance-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+}
+
+.finance-metric-card {
+  border-radius: 10px;
+  padding: 18px 22px;
+  box-shadow: var(--shadow);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 108px;
+}
+
+.finance-metric-card--good { background: #1f8a4c; }
+.finance-metric-card--bad  { background: var(--accent); }
+.finance-metric-card--pending {
+  background: var(--surface);
+  border: 1px dashed var(--border);
+  color: var(--text);
+}
+
+.finance-metric-card__label {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.finance-metric-card__value {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.finance-metric-card__line {
+  font-size: 13.5px;
+  opacity: 0.95;
+}
+
+.finance-metric-card__note {
+  font-size: 12.5px;
+  color: var(--text);
+  font-style: italic;
+}
+
+@media (max-width: 1100px) {
+  .finance-metric-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+  .finance-metric-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.pulse__spark {
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin: 6px 0 4px;
+}
+
+.pulse__quarter-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.pulse__quarter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+}
+.pulse__quarter-card--current { border-color: var(--accent); }
+
+.pulse__quarter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pulse__quarter-label { font-weight: 700; color: var(--text-h); font-size: 13.5px; }
+
+.pulse__quarter-state {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: 2px 7px;
+  border-radius: 5px;
+}
+.pulse__quarter-state--done   { color: #16a34a; background: rgba(22, 163, 74, .1); }
+.pulse__quarter-state--now    { color: var(--accent); background: var(--accent-light); }
+.pulse__quarter-state--future { color: var(--text); background: var(--border); }
+
+.pulse__quarter-pct { font-weight: 700; font-size: 20px; }
+.pulse__quarter-pct--pending { color: var(--text); font-size: 15px; }
+
+.pulse__main-grid {
+  display: grid;
+  grid-template-columns: 1.9fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.pulse__panel-note {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.pulse__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pulse__highlight-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.pulse__highlight {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pulse__highlight:last-child { border-bottom: none; padding-bottom: 0; }
+.pulse__highlight:first-child { padding-top: 0; }
+.pulse__highlight::before {
+  content: "";
+  width: 3px;
+  border-radius: 3px;
+  flex: none;
+  align-self: stretch;
+}
+.pulse__highlight--good::before   { background: #16a34a; }
+.pulse__highlight--watch::before  { background: #d97706; }
+.pulse__highlight--behind::before { background: var(--accent); }
+.pulse__highlight--info::before   { background: var(--border); }
+
+.pulse__highlight-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pulse__highlight-title { font-weight: 600; font-size: 13px; color: var(--text-h); }
+.pulse__highlight-sub { font-size: 12.5px; color: var(--text); }
+
+.pulse__mini-board { display: flex; flex-direction: column; }
+.pulse__mini-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pulse__mini-row:last-child { border-bottom: none; padding-bottom: 0; }
+.pulse__mini-row:first-child { padding-top: 0; }
+.pulse__mini-rank {
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text);
+  width: 16px;
+  flex: none;
+}
+.pulse__mini-name { font-weight: 600; font-size: 13px; color: var(--text-h); flex: 1; min-width: 0; }
+.pulse__mini-team { font-size: 11.5px; color: var(--text); font-weight: 400; }
+.pulse__mini-value { font-weight: 600; font-size: 12.5px; flex: none; color: var(--text-h); }
+
+@media (max-width: 900px) {
+  .kpi-grid--3 { grid-template-columns: repeat(2, 1fr); }
+  .pulse__quarter-strip { grid-template-columns: repeat(2, 1fr); }
+  .pulse__main-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Project Tracking ───────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: monospace;
+  font-size: 11.5px; font-weight: 500;
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--text);
+}
+.badge--status {
+  background: var(--accent-light); border-color: var(--accent);
+  color: var(--accent); font-weight: 600;
+}
+
+.project-timeline__back { font-size: 13px; color: var(--text); text-decoration: none; margin-bottom: 8px; display: inline-block; }
+.project-timeline__back:hover { color: var(--accent); }
+.project-timeline__sub { color: var(--text); font-size: 14px; margin: 0 0 12px; }
+.project-timeline__sub b { color: var(--text-h); font-weight: 600; }
+.project-timeline__badges { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.project-timeline__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.project-timeline__stat-label { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--text); margin: 0 0 6px; }
+.project-timeline__stat-value { font-family: monospace; font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; color: var(--text-h); margin: 0; }
+.project-timeline__stat-value--accent { color: var(--accent); }
+.project-timeline__stat-value--cost { color: #2f5d8a; }
+.project-timeline__stat-note {
+  grid-column: 1 / -1;
+  font-size: 12.5px; color: var(--text);
+  border-top: 1px solid var(--border);
+  padding-top: 12px; margin: 4px 0 0;
+}
+
+.project-timeline { position: relative; padding-left: 28px; }
+.project-timeline::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+
+.project-timeline__node { position: relative; padding-bottom: 20px; }
+.project-timeline__dot {
+  position: absolute; left: -28px; top: 3px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--bg); border: 2.5px solid #2f5d8a;
+}
+.project-timeline__node--milestone .project-timeline__dot { border-color: var(--accent); }
+
+.project-timeline__card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.project-timeline__card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
+.project-timeline__date { font-family: monospace; font-size: 12px; color: var(--text); }
+.project-timeline__kind { font-size: 14px; font-weight: 600; color: var(--text-h); }
+.project-timeline__amount { font-family: monospace; font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.project-timeline__amount--accent { color: var(--accent); }
+.project-timeline__amount--cost { color: #2f5d8a; }
+.project-timeline__who { font-size: 12.5px; color: var(--text); margin: 4px 0 0; }
+.project-timeline__lines { margin: 8px 0 0; padding-top: 8px; border-top: 1px dashed var(--border); }
+.project-timeline__line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text); padding: 2px 0; }
+.project-timeline__line span:last-child { font-family: monospace; font-variant-numeric: tabular-nums; color: var(--text-h); }
+
+.project-timeline__gap {
+  position: relative;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  background: rgba(234, 88, 12, .08);
+  border: 1px dashed rgba(234, 88, 12, .4);
+  border-radius: 10px;
+  font-size: 12.5px; color: #ea580c;
+}
+.project-timeline__gap b { font-family: monospace; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .project-timeline__stats { grid-template-columns: 1fr 1fr; }
 }
 
 /* Sidebar tren mobile luon hien full (khong thu nho) — dat cuoi file de thang cascade

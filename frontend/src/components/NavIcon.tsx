@@ -1,6 +1,6 @@
 export type NavIconName =
   | 'dashboard' | 'calendar' | 'wrench' | 'finance' | 'device' | 'invoice'
-  | 'users' | 'settings' | 'list' | 'chevron-left' | 'chevron-right' | 'logout'
+  | 'users' | 'settings' | 'list' | 'chevron-left' | 'chevron-right' | 'logout' | 'scale' | 'pulse' | 'route'
 
 const PATHS: Record<NavIconName, string> = {
   dashboard:      '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
@@ -15,6 +15,9 @@ const PATHS: Record<NavIconName, string> = {
   'chevron-left':  '<polyline points="15 18 9 12 15 6"/>',
   'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
   logout:         '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  scale:          '<line x1="12" y1="3" x2="12" y2="21"/><path d="M5 7h14"/><path d="M5 7 2 15a3 3 0 0 0 6 0z"/><path d="M19 7l-3 8a3 3 0 0 0 6 0z"/>',
+  pulse:          '<polyline points="3 12 8 12 10 6 14 18 16 12 21 12"/>',
+  route:          '<circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M7.2 7.6C10 10 8 13 12 13s2-3 4.8-.6"/>',
 }
 
 type Props = { name: NavIconName; size?: number }

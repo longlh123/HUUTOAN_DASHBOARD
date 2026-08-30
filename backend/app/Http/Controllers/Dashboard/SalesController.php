@@ -34,18 +34,18 @@ class SalesController extends Controller
     public function all(Request $request): JsonResponse
     {
         [$from, $to] = $this->parseDateRange($request);
-        $territory   = $request->query('territory');
-        $department  = $request->query('department');
-        $groupBy     = in_array($request->query('group_by'), ['day', 'week', 'month', 'quarter'])
+        $territory = $request->query('territory');
+        $department = $request->query('department');
+        $groupBy = in_array($request->query('group_by'), ['day', 'week', 'month', 'quarter'])
             ? $request->query('group_by')
             : 'month';
 
         return $this->success([
-            'summary'   => $this->sales->summary($from, $to, $territory, $department),
+            'summary' => $this->sales->summary($from, $to, $territory, $department),
             'by_period' => $this->sales->byPeriod($from, $to, $groupBy, $territory, $department),
-            'by_rep'    => $this->sales->byRep($from, $to, $territory, $department),
-            'by_team'   => $this->sales->byTeam($from, $to, $territory, $department),
-            'kpi'       => $this->sales->kpiQuarterlyTotals($from->year, $territory, $department),
+            'by_rep' => $this->sales->byRep($from, $to, $territory, $department),
+            'by_team' => $this->sales->byTeam($from, $to, $territory, $department),
+            'kpi' => $this->sales->kpiQuarterlyTotals($from->year, $territory, $department),
         ]);
     }
 
@@ -60,7 +60,7 @@ class SalesController extends Controller
     public function byPeriod(Request $request): JsonResponse
     {
         [$from, $to] = $this->parseDateRange($request);
-        $groupBy     = in_array($request->query('group_by'), ['day', 'week', 'month', 'quarter'])
+        $groupBy = in_array($request->query('group_by'), ['day', 'week', 'month', 'quarter'])
             ? $request->query('group_by')
             : 'month';
 
@@ -103,6 +103,7 @@ class SalesController extends Controller
     public function gapToTarget(Request $request): JsonResponse
     {
         $year = (int) $request->query('year', now()->year);
+
         return $this->success($this->sales->quarterlyGapChart(
             $year,
             $request->query('territory'),
@@ -137,9 +138,18 @@ class SalesController extends Controller
         ));
     }
 
+    // Bang chi tiet hoa don ERP (NNC/SS) de team doi chieu voi Sales — khop 18 cot file Excel Sale gui
+    public function erpReconciliation(Request $request): JsonResponse
+    {
+        [$from, $to] = $this->parseDateRange($request);
+
+        return $this->success($this->sales->erpReconciliation($from, $to, $request->query('department')));
+    }
+
     public function requestTypeCrosstab(Request $request): JsonResponse
     {
         $year = (int) $request->query('year', now()->year);
+
         return $this->success($this->sales->quoteRequestTypeCrosstab(
             $year,
             $request->query('territory'),
@@ -150,7 +160,7 @@ class SalesController extends Controller
     private function parseDateRange(Request $request): array
     {
         $from = Carbon::parse($request->query('from', now()->startOfYear()->toDateString()));
-        $to   = Carbon::parse($request->query('to',   now()->toDateString()));
+        $to = Carbon::parse($request->query('to', now()->toDateString()));
 
         return [$from, $to];
     }

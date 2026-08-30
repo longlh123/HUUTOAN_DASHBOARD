@@ -101,6 +101,10 @@ export type KpiTarget = {
   id:          string
   crm_user_id: string
   user_name:   string
+  // Team ma target nay duoc TINH VAO — co the khac team CRM song cua nguoi giu target
+  // (vd target duoc chuyen cho nguoi ngoai team nhung van tinh vao team cu).
+  team_id:     string | null
+  team_name:   string | null
   year:        number
   q1:          number | null
   q2:          number | null
@@ -114,6 +118,7 @@ export type CrmUser = {
   territory:  string
   department: string
   team:       string
+  team_id:    string
 }
 
 export type UserDetail = {
@@ -221,6 +226,7 @@ export type WeeklyDealItem = {
 export type ReportMetrics = {
   day_count:   number
   day_value:   number
+  week_count:  number
   week_value:  number
   accu_q:      number
   target_q:    number
@@ -265,6 +271,32 @@ export type DeviceProductLineItem = {
 export type DeviceProductLineData = {
   total: number
   items: DeviceProductLineItem[]
+}
+
+export type ReconciliationRow = {
+  source:                   'onaccount' | 'so_invoice'
+  invoice_number:           string
+  ledger_voucher:           string
+  last_settle_voucher:      string
+  invoice_date:             string
+  amount_included:          number
+  sf_amount:                number
+  amount_excluded:          number
+  sf_percent:               number
+  salesman_id:              string
+  salesman:                 string
+  department:               string
+  f2_department:            string
+  sales_channel:            string
+  project:                  string
+  project_name:             string
+  so_number:                string
+  customer_account:         string
+  customer_name:            string
+  service_type:             string
+  sum_project_sales_price:  number | null
+  sum_project_sf:           number | null
+  is_settled:               boolean
 }
 
 export type DateRange = { from: string; to: string }
@@ -365,6 +397,49 @@ export type CostComparison = {
   summary: CostComparisonSummary
   items:   CostComparisonItem[]
 }
+
+export type ProjectStatus = 'Created' | 'Estimated' | 'In Process' | 'Closed' | 'Warranty'
+
+export type ProjectListItem = {
+  code:                 string
+  description:          string
+  customer:              string
+  owner:                 string
+  status:                string
+  start_date:            string | null
+  revenue_to_date:       number
+  cost_to_date:          number
+  last_activity_at:      string | null
+  days_since_activity:   number | null
+}
+
+export type ProjectTransaction = {
+  date:     string
+  type:     string
+  origin:   string
+  category: string
+  amount:   number
+  who:      string | null
+  item:     string | null
+}
+
+export type ProjectTimeline = {
+  project: {
+    code:          string
+    description:   string
+    customer:      string
+    owner:         string
+    status:        string
+    start_date:    string | null
+    quote_amount:  number | null
+  }
+  totals: { revenue: number; material_cost: number; labor_cost: number }
+  transactions: ProjectTransaction[]
+}
+
+export const fetchProjectList     = (department = 'B2B', status: ProjectStatus = 'In Process') =>
+  apiFetch<ProjectListItem[]>(`${BASE}/projects?department=${department}&status=${encodeURIComponent(status)}`)
+export const fetchProjectTimeline = (code: string) => apiFetch<ProjectTimeline>(`${BASE}/projects/${encodeURIComponent(code)}`)
 
 const BASE          = '/api/dashboard/sales'
 const OPP_BASE      = '/api/dashboard/opportunities'
@@ -474,6 +549,9 @@ export const fetchOppQualityDetail = (territory: string, department?: string) =>
 export const fetchOppActivity = (range: DateRange, territory: string, department?: string) =>
   apiFetch<OppActivityRow[]>(`${OPP_BASE}/activity?${qs(range, { territory, ...(department ? { department } : {}) })}`)
 
+export const fetchErpReconciliation = (range: DateRange, department?: string) =>
+  apiFetch<ReconciliationRow[]>(`${BASE}/erp-reconciliation?${qs(range, department ? { department } : {})}`)
+
 export const fetchRequestTypeCrosstab = (year: number, territory: string, department?: string) =>
   apiFetch<RequestTypeCrosstab>(`${BASE}/request-type?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)
 
@@ -521,8 +599,55 @@ export const fetchKpiPerformance = (year: number) =>
 export const createKpiTarget = (payload: Omit<KpiTarget, 'id'>) =>
   apiPost<KpiTarget>('/api/dashboard/kpi', payload)
 
-export const updateKpiTarget = (id: string, payload: Pick<KpiTarget, 'q1' | 'q2' | 'q3' | 'q4'> & { year: number }) =>
+export const updateKpiTarget = (id: string, payload: Pick<KpiTarget, 'q1' | 'q2' | 'q3' | 'q4' | 'team_id' | 'team_name'> & { year: number }) =>
   apiPut<KpiTarget>(`/api/dashboard/kpi/${id}`, payload)
 
 export const deleteKpiTarget = (id: string, year: number) =>
   apiDelete(`/api/dashboard/kpi/${id}?year=${year}`)
+
+export type KpiCompanyTarget = { year: number; target_amount: number }
+
+export type KpiTeamTarget = {
+  id:        number
+  year:      number
+  team_id:   string
+  team_name: string
+  q1:        number
+  q2:        number
+  q3:        number
+  q4:        number
+}
+
+async function apiPostWithMessage<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body:    JSON.stringify(body),
+  })
+  handle401(res)
+  if (!res.ok) {
+    let msg = `Lỗi API (${res.status})`
+    try { const j = await res.json(); if (j?.message) msg = j.message } catch { /* ignore */ }
+    throw new Error(msg)
+  }
+  const json: { data: T } = await res.json()
+  return json.data
+}
+
+export const fetchKpiCompanyTarget = (year: number) =>
+  apiFetch<KpiCompanyTarget | null>(`/api/dashboard/kpi/company-target?year=${year}`)
+
+export const saveKpiCompanyTarget = (year: number, targetAmount: number) =>
+  apiPut<KpiCompanyTarget>('/api/dashboard/kpi/company-target', { year, target_amount: targetAmount })
+
+export const fetchKpiTeamTargets = (year: number) =>
+  apiFetch<KpiTeamTarget[]>(`/api/dashboard/kpi/team-targets?year=${year}`)
+
+export const createKpiTeamTarget = (payload: Omit<KpiTeamTarget, 'id'>) =>
+  apiPostWithMessage<KpiTeamTarget>('/api/dashboard/kpi/team-targets', payload)
+
+export const updateKpiTeamTarget = (id: number, payload: Pick<KpiTeamTarget, 'q1' | 'q2' | 'q3' | 'q4'>) =>
+  apiPut<KpiTeamTarget>(`/api/dashboard/kpi/team-targets/${id}`, payload)
+
+export const deleteKpiTeamTarget = (id: number) =>
+  apiDelete(`/api/dashboard/kpi/team-targets/${id}`)

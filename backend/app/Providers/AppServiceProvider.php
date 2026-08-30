@@ -11,7 +11,10 @@ use App\Services\Erp\ErpApiService;
 use App\Services\Erp\ErpSalesAttributionService;
 use App\Services\Erp\ErpTokenService;
 use App\Services\Erp\FinanceService;
+use App\Services\Erp\ProjectTrackingService;
 use App\Services\Invoice\InvoiceImportService;
+use App\Services\Sharepoint\SharepointApiService;
+use App\Services\Sharepoint\SharepointTokenService;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use SocialiteProviders\Azure\AzureExtendSocialite;
@@ -33,7 +36,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(FinanceService::class);
         $this->app->singleton(ErpSalesAttributionService::class);
         $this->app->singleton(CostService::class);
+        $this->app->singleton(ProjectTrackingService::class);
         $this->app->singleton(InvoiceImportService::class);
+        $this->app->singleton(SharepointTokenService::class);
+        $this->app->singleton(SharepointApiService::class);
     }
 
     /**

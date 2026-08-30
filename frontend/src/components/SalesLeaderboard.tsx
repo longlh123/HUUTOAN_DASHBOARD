@@ -53,8 +53,9 @@ export function SalesLeaderboard({ territory, department, range }: Props) {
     return { on, risk, behind, total: withKpi.length }
   })()
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const pageData   = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const paginate    = !department
+  const totalPages  = Math.ceil(filtered.length / PAGE_SIZE)
+  const pageData    = paginate ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE) : filtered
 
   return (
     <div className="card">
@@ -129,7 +130,7 @@ export function SalesLeaderboard({ territory, department, range }: Props) {
               </thead>
               <tbody>
                 {pageData.map((rep, i) => {
-                  const rank = page * PAGE_SIZE + i + 1
+                  const rank = paginate ? page * PAGE_SIZE + i + 1 : i + 1
                   return (
                     <tr key={rep.owner_id}>
                       <td className="leaderboard__rank">{rank}</td>
@@ -175,7 +176,7 @@ export function SalesLeaderboard({ territory, department, range }: Props) {
             </table>
           </div>
 
-          {totalPages > 1 && (
+          {paginate && totalPages > 1 && (
             <div className="pagination">
               <button
                 className="pagination__btn"

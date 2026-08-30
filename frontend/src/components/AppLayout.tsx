@@ -6,9 +6,11 @@ import type { NavIconName } from './NavIcon'
 
 const NAV_ITEMS: { to: string; label: string; icon: NavIconName; adminOnly: boolean }[] = [
   { to: '/dashboard/sales',    label: 'Dashboard',   icon: 'dashboard', adminOnly: false },
+  { to: '/dashboard/sales/weekly-pulse', label: 'Nhịp tuần', icon: 'pulse', adminOnly: false },
   { to: '/dashboard/sales/daily-report', label: 'Daily Report', icon: 'calendar', adminOnly: false },
-  { to: '/dashboard/services', label: 'Services',    icon: 'wrench', adminOnly: false },
-  { to: '/dashboard/finance',  label: 'Finance',     icon: 'finance', adminOnly: false },
+  { to: '/dashboard/sales/reconciliation', label: 'Đối chiếu doanh số', icon: 'scale', adminOnly: false },
+  { to: '/dashboard/sales/projects', label: 'Theo dõi dự án', icon: 'route', adminOnly: false },
+  { to: '/dashboard/finance/weekly-pulse', label: 'Finance', icon: 'pulse', adminOnly: false },
   { to: '/dashboard/devices',  label: 'Device',      icon: 'device', adminOnly: false },
   { to: '/invoices',           label: 'Hóa đơn',     icon: 'invoice', adminOnly: false },
   { to: '/users',              label: 'Users',           icon: 'users', adminOnly: true },
