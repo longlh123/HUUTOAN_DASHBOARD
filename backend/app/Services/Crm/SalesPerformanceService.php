@@ -940,6 +940,68 @@ class SalesPerformanceService
         ];
     }
 
+    /**
+     * Biến động pipeline trong 1 khoảng ngày — dùng cho báo cáo tuần (sếp tự chụp số tuần trước để so sánh,
+     * chỗ này chỉ cần đếm New/Won/Lost trong khoảng, không cần lưu snapshot).
+     *
+     * New  = opportunity mới tạo trong khoảng (bất kỳ trạng thái hiện tại).
+     * Won  = quote statecode=2 có closedon trong khoảng, giá trị = resolved_value (giống mọi chỗ khác).
+     * Lost = quote statecode=3 có closedon trong khoảng, giá trị = resolved_value.
+     *
+     * Chỉ tính quote CÓ gắn Opportunity (_opportunityid_value khác null) — quote dịch vụ/bảo trì
+     * (DVBT/DVSC...) không đi qua Opportunity nên chưa từng nằm trong Pipeline Value, tính vào đây
+     * sẽ làm sai lệch báo cáo biến động pipeline (phát hiện qua case thật: 3 quote Won cùng ngày
+     * đều là dịch vụ nhỏ, opportunityid null, kéo tổng giá trị Won xuống chỉ còn vài triệu đồng).
+     *
+     * @return array{new: array{count:int,value:float}, won: array{count:int,value:float}, lost: array{count:int,value:float}}
+     */
+    public function pipelineWeeklyChanges(Carbon $from, Carbon $to, ?string $territory = null, ?string $department = null): array
+    {
+        $newOpps = $this->filterByTerritory(
+            $this->filterByDepartment($this->fetchNewOpportunities($from, $to), $department),
+            $territory
+        );
+
+        $closedQuotes = $this->filterByTerritory(
+            $this->filterByDepartment($this->fetchClosedQuotes($from, $to), $department),
+            $territory
+        );
+        $closedQuotes = $closedQuotes->filter(fn ($q) => ! empty($q['_opportunityid_value']));
+        $closedQuotes = $this->resolveQuoteValues($closedQuotes, $this->ttlFor($to));
+
+        $won = $closedQuotes->filter(fn ($q) => (int) ($q['statecode'] ?? 0) === 2);
+        $lost = $closedQuotes->filter(fn ($q) => (int) ($q['statecode'] ?? 0) === 3);
+
+        return [
+            'new' => [
+                'count' => $newOpps->count(),
+                'value' => (float) $newOpps->sum('estimatedvalue'),
+            ],
+            'won' => [
+                'count' => $won->count(),
+                'value' => (float) $won->sum('resolved_value'),
+            ],
+            'lost' => [
+                'count' => $lost->count(),
+                'value' => (float) $lost->sum('resolved_value'),
+            ],
+        ];
+    }
+
+    private function fetchNewOpportunities(Carbon $from, Carbon $to): Collection
+    {
+        $data = $this->api->get('opportunities', [
+            '$select' => 'opportunityid,estimatedvalue,createdon,_ownerid_value,_owningbusinessunit_value',
+            '$filter' => implode(' and ', [
+                "createdon ge {$from->copy()->startOfDay()->utc()->toIso8601String()}",
+                "createdon lt {$to->copy()->addDay()->startOfDay()->utc()->toIso8601String()}",
+            ]),
+            '$orderby' => 'createdon asc',
+        ], ttl: $this->ttlFor($to));
+
+        return collect($data['value'] ?? []);
+    }
+
     public function quarterlyGapChart(int $year, ?string $territory = null, ?string $department = null): array
     {
         $scopedIds = $this->fetchUsers()

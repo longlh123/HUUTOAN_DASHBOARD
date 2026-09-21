@@ -95,6 +95,7 @@ Route::middleware(['auth:sanctum', EnforceTerritory::class])
         Route::get('/devices/work-orders/{id}/parts', [DeviceController::class, 'workOrderParts']);
         Route::get('/devices/work-orders/parts-summary', [DeviceController::class, 'workOrdersPartsSummary']);
         Route::get('/opportunities/pipeline', [OpportunitiesController::class, 'pipeline']);
+        Route::get('/opportunities/pipeline/weekly-changes', [OpportunitiesController::class, 'pipelineWeeklyChanges']);
         Route::get('/opportunities/quality', [OpportunitiesController::class, 'quality']);
         Route::get('/opportunities/quality-detail', [OpportunitiesController::class, 'qualityDetail']);
         Route::get('/opportunities/activity', [OpportunitiesController::class, 'activity']);

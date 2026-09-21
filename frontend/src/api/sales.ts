@@ -79,6 +79,17 @@ export type PotentialData = {
   pct:   number
 }
 
+export type PipelineChangeItem = {
+  count: number
+  value: number
+}
+
+export type PipelineWeeklyChanges = {
+  new:  PipelineChangeItem
+  won:  PipelineChangeItem
+  lost: PipelineChangeItem
+}
+
 export type PipelineData = {
   pipeline_value: number
   opportunity_count: number
@@ -536,6 +547,9 @@ export const fetchByTeam   = (range: DateRange, territory: string, department?: 
 
 export const fetchPipeline = (territory: string, department?: string) =>
   apiFetch<PipelineData>(`${OPP_BASE}/pipeline?${new URLSearchParams({ territory, ...(department ? { department } : {}) })}`)
+
+export const fetchPipelineWeeklyChanges = (from: string, to: string, territory: string, department?: string) =>
+  apiFetch<PipelineWeeklyChanges>(`${OPP_BASE}/pipeline/weekly-changes?${new URLSearchParams({ from, to, territory, ...(department ? { department } : {}) })}`)
 
 export const fetchGapToTarget = (year: number, territory: string, department?: string) =>
   apiFetch<GapToTargetItem[]>(`${BASE}/gap-to-target?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)

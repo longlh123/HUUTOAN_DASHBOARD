@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, KpiQuarterly, KpiCompanyTarget, OppQualityRow, OppQualityDetailRow, DateRange, GroupBy } from '../api/sales'
-import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchOppQuality, fetchOppQualityDetail, fetchKpiCompanyTarget } from '../api/sales'
-import { getPresetRange, prevYearRange } from '../utils/date'
+import type { SalesSummary, PeriodData, TeamData, PipelineData, GapToTargetItem, PipelineWeeklyChanges, KpiQuarterly, KpiCompanyTarget, OppQualityRow, OppQualityDetailRow, DateRange, GroupBy } from '../api/sales'
+import { fetchAllSales, fetchPipeline, fetchGapToTarget, fetchPipelineWeeklyChanges, fetchOppQuality, fetchOppQualityDetail, fetchKpiCompanyTarget } from '../api/sales'
+import { getPresetRange, prevYearRange, getThisWeekRange } from '../utils/date'
 import { KpiCards } from '../components/KpiCards'
 import { RevenueChart } from '../components/RevenueChart'
 import { SalesLeaderboard } from '../components/SalesLeaderboard'
@@ -49,6 +49,9 @@ export function SalesDashboard() {
 
   const [gapData,    setGapData]    = useState<GapToTargetItem[]>([])
   const [gapLoading, setGapLoading] = useState(true)
+
+  const [weeklyChanges,        setWeeklyChanges]        = useState<PipelineWeeklyChanges | null>(null)
+  const [weeklyChangesLoading, setWeeklyChangesLoading] = useState(true)
 
   const [qualityData,     setQualityData]     = useState<OppQualityRow[]>([])
   const [qualityLoading,  setQualityLoading]  = useState(true)
@@ -113,6 +116,16 @@ export function SalesDashboard() {
       .catch(() => {})
       .finally(() => setGapLoading(false))
   }, [territory, department, range, pipelineVisited])
+
+  useEffect(() => {
+    if (!pipelineVisited) return
+    setWeeklyChangesLoading(true)
+    const { from, to } = getThisWeekRange()
+    fetchPipelineWeeklyChanges(from, to, territory, department)
+      .then(setWeeklyChanges)
+      .catch(() => {})
+      .finally(() => setWeeklyChangesLoading(false))
+  }, [territory, department, pipelineVisited])
 
   useEffect(() => {
     if (!qualityVisited) return
@@ -216,7 +229,14 @@ export function SalesDashboard() {
             <p className="section-divider__sub">Cac co hoi dang mo — khong loc theo ngay</p>
             {pipelineFetching && !pipelineLoading && <span className="dashboard__refreshing">Dang cap nhat...</span>}
           </div>
-          <PipelineHealth data={pipelineData} loading={pipelineLoading} gapData={gapData} gapLoading={gapLoading} />
+          <PipelineHealth
+            data={pipelineData}
+            loading={pipelineLoading}
+            gapData={gapData}
+            gapLoading={gapLoading}
+            weeklyChanges={weeklyChanges}
+            weeklyChangesLoading={weeklyChangesLoading}
+          />
         </div>
       )}
 

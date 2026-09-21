@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import type { PipelineData, PotentialData, GapToTargetItem } from '../api/sales'
+import type { PipelineData, PotentialData, GapToTargetItem, PipelineWeeklyChanges } from '../api/sales'
 import { fmtVND, fmtVNDFull } from '../utils/format'
 
 type Props = {
-  data:       PipelineData | null
-  loading:    boolean
-  gapData:    GapToTargetItem[]
-  gapLoading: boolean
+  data:                  PipelineData | null
+  loading:               boolean
+  gapData:               GapToTargetItem[]
+  gapLoading:            boolean
+  weeklyChanges:         PipelineWeeklyChanges | null
+  weeklyChangesLoading:  boolean
 }
 
 const PAGE_SIZE = 10
@@ -37,6 +39,12 @@ function potentialColor(label: string): string {
     default:       return '#9ca3af'
   }
 }
+
+const WEEKLY_CHANGE_ROWS: { key: 'new' | 'won' | 'lost'; label: string; color: string }[] = [
+  { key: 'new',  label: 'Moi mo',        color: '#6b7280' },
+  { key: 'won',  label: 'Thang (Won)',   color: '#16a34a' },
+  { key: 'lost', label: 'Thua (Lost)',   color: '#ea580c' },
+]
 
 function PotentialBreakdown({ items, total }: { items: PotentialData[]; total: number }) {
   if (!items || items.length === 0) return null
@@ -119,7 +127,7 @@ function sortIcon(col: SortCol, active: SortCol, dir: SortDir): string {
   return dir === 'asc' ? ' ↑' : ' ↓'
 }
 
-export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
+export function PipelineHealth({ data, loading, gapData, gapLoading, weeklyChanges, weeklyChangesLoading }: Props) {
   const [topWinPage, setTopWinPage]     = useState(0)
   const [topWinFilter, setTopWinFilterRaw] = useState<'ALL' | 'PREV' | 'CURRENT' | 'NEXT'>('CURRENT')
   const [sortCol, setSortCol]           = useState<SortCol>('value')
@@ -225,9 +233,33 @@ export function PipelineHealth({ data, loading, gapData, gapLoading }: Props) {
       </div>
 
       <div className="pipeline-middle">
-        <div className="card pipeline-middle__potential">
-          <h2 className="card__title">Phan loai co hoi ({data.opportunity_count})</h2>
-          <PotentialBreakdown items={data.by_potential ?? []} total={data.opportunity_count} />
+        <div className="pipeline-middle__left">
+          <div className="card">
+            <h2 className="card__title">Bien dong tuan nay</h2>
+            {weeklyChangesLoading && !weeklyChanges ? (
+              <p className="table-placeholder">Dang tai...</p>
+            ) : !weeklyChanges ? (
+              <p className="table-placeholder">Chua co du lieu</p>
+            ) : (
+              <div className="weekly-change-row">
+                {WEEKLY_CHANGE_ROWS.map(({ key, label, color }) => (
+                  <div className="weekly-change-row__item" key={key}>
+                    <div className="weekly-change-row__label">
+                      <span className="potential-breakdown__dot" style={{ backgroundColor: color }} />
+                      {label}
+                    </div>
+                    <div className="weekly-change-row__value">{fmtVND(weeklyChanges[key].value)}</div>
+                    <div className="weekly-change-row__sub">{weeklyChanges[key].count} co hoi</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <h2 className="card__title">Phan loai co hoi ({data.opportunity_count})</h2>
+            <PotentialBreakdown items={data.by_potential ?? []} total={data.opportunity_count} />
+          </div>
         </div>
 
         <div className="card pipeline-middle__gap">

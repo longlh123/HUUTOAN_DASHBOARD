@@ -20,6 +20,19 @@ class OpportunitiesController extends Controller
         return $this->success($this->sales->pipeline($request->query('territory'), $request->query('department')));
     }
 
+    public function pipelineWeeklyChanges(Request $request): JsonResponse
+    {
+        $from = Carbon::parse($request->query('from', now()->startOfWeek()->toDateString()));
+        $to   = Carbon::parse($request->query('to',   now()->toDateString()));
+
+        return $this->success($this->sales->pipelineWeeklyChanges(
+            $from,
+            $to,
+            $request->query('territory'),
+            $request->query('department')
+        ));
+    }
+
     public function quality(Request $request): JsonResponse
     {
         try {
