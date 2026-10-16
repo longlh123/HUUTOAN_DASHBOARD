@@ -132,6 +132,38 @@ export type CrmUser = {
   team_id:    string
 }
 
+export type ReferenceTable = {
+  key:           string
+  label:         string
+  logical_name:  string
+}
+
+export type ReferenceField = {
+  key:                string
+  label:              string
+  type:               'text' | 'select' | 'lookup' | 'text_select'
+  readonly?:          boolean
+  badge?:             boolean
+  options?:           Record<number, string>
+  lookup_table?:      string
+  depends_on?:        string
+  depends_on_match?:  string
+}
+
+export type ReferenceSchema = {
+  key:          string
+  label:        string
+  logical_name: string
+  fields:       ReferenceField[]
+}
+
+export type ReferenceRow = {
+  id: string
+  [key: string]: string | number | null
+}
+
+export type ReferenceOption = { id: string; label: string; [key: string]: string }
+
 export type UserDetail = {
   id:               string
   full_name:        string
@@ -604,6 +636,28 @@ export const updateUser = (id: string, payload: {
   is_disabled?:      boolean
 }) => apiPut<{ id: string }>(`/api/dashboard/users/${id}`, payload)
 
+export const fetchReferenceTables  = () =>
+  apiFetch<ReferenceTable[]>('/api/dashboard/reference-data')
+
+export const fetchReferenceSchema  = (table: string) =>
+  apiFetch<ReferenceSchema>(`/api/dashboard/reference-data/${table}/schema`)
+
+export const fetchReferenceRows    = (table: string, filter?: { field: string; value: string }) =>
+  apiFetch<ReferenceRow[]>(
+    filter
+      ? `/api/dashboard/reference-data/${table}?filter_field=${filter.field}&filter_value=${filter.value}`
+      : `/api/dashboard/reference-data/${table}`
+  )
+
+export const fetchReferenceOptions = (table: string) =>
+  apiFetch<ReferenceOption[]>(`/api/dashboard/reference-data/${table}/options`)
+
+export const createReferenceRow    = (table: string, payload: Record<string, unknown>) =>
+  apiPost<{ id: string }>(`/api/dashboard/reference-data/${table}`, payload)
+
+export const updateReferenceRow    = (table: string, id: string, payload: Record<string, unknown>) =>
+  apiPut<{ id: string }>(`/api/dashboard/reference-data/${table}/${id}`, payload)
+
 export const fetchKpiTargets     = (year: number) =>
   apiFetch<KpiTarget[]>(`/api/dashboard/kpi?year=${year}`)
 
@@ -665,3 +719,12 @@ export const updateKpiTeamTarget = (id: number, payload: Pick<KpiTeamTarget, 'q1
 
 export const deleteKpiTeamTarget = (id: number) =>
   apiDelete(`/api/dashboard/kpi/team-targets/${id}`)
+
+export type ItemCatalogEntry = {
+  item_number: string
+  name:        string | null
+  unit:        string | null
+}
+
+export const fetchItemCatalog = (q: string) =>
+  apiFetch<ItemCatalogEntry[]>(`/api/dashboard/items/search?${new URLSearchParams({ q })}`)

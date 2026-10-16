@@ -2237,3 +2237,123 @@ input  { font-family: inherit; }
     display: inline;
   }
 }
+
+/* ── Material Entry Page ───────────────────────────────── */
+.material-entry__subtitle {
+  font-size: 13px;
+  color: var(--text);
+  margin: 4px 0 0;
+}
+
+.material-entry__demo-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: #ea580c;
+  white-space: nowrap;
+}
+
+.material-entry__field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.material-entry__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.material-entry__field-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.material-entry__name-input {
+  width: 100%;
+  text-align: left;
+}
+
+.material-entry__qty {
+  width: 84px;
+}
+
+.material-entry__code {
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.material-entry__code--empty {
+  color: var(--border);
+  font-style: italic;
+}
+
+.material-entry__muted {
+  color: var(--border);
+}
+
+.material-entry__row--incomplete td {
+  background: #fff7ed;
+}
+
+.material-entry__remove-btn {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  opacity: .6;
+  cursor: pointer;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+}
+
+.material-entry__remove-btn:hover {
+  opacity: 1;
+  background: var(--accent-light);
+  color: var(--accent);
+}
+
+.material-entry__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.material-entry__save-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.material-entry__ac-portal {
+  position: fixed;
+  z-index: 1000;
+}
+
+.material-entry__toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--text-h);
+  color: var(--bg);
+  padding: 11px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  max-width: calc(100vw - 32px);
+  z-index: 500;
+  box-shadow: var(--shadow);
+}

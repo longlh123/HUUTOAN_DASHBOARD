@@ -10,10 +10,12 @@ const NAV_ITEMS: { to: string; label: string; icon: NavIconName; adminOnly: bool
   { to: '/dashboard/sales/daily-report', label: 'Daily Report', icon: 'calendar', adminOnly: false },
   { to: '/dashboard/sales/reconciliation', label: 'Đối chiếu doanh số', icon: 'scale', adminOnly: false },
   { to: '/dashboard/sales/projects', label: 'Theo dõi dự án', icon: 'route', adminOnly: false },
+  { to: '/dashboard/sales/material-entry', label: 'Vật tư lắp đặt', icon: 'clipboard', adminOnly: false },
   { to: '/dashboard/finance/weekly-pulse', label: 'Finance', icon: 'pulse', adminOnly: false },
   { to: '/dashboard/devices',  label: 'Device',      icon: 'device', adminOnly: false },
   { to: '/invoices',           label: 'Hóa đơn',     icon: 'invoice', adminOnly: false },
   { to: '/users',              label: 'Users',           icon: 'users', adminOnly: true },
+  { to: '/settings/reference-data', label: 'Reference Data', icon: 'database', adminOnly: true },
   { to: '/settings/kpi',       label: 'Cai dat KPI',     icon: 'settings', adminOnly: true },
   { to: '/analytics/request-type', label: 'Loai yeu cau', icon: 'list', adminOnly: true },
 ]

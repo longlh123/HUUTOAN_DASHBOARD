@@ -1,0 +1,338 @@
+<title>Reference Data</title>
+<style>
+:root {
+  --text:         #6b7280;
+  --text-h:       #111827;
+  --bg:           #ffffff;
+  --surface:      #f9fafb;
+  --border:       #e5e7eb;
+  --accent:       #C8102E;
+  --accent-light: rgba(200, 16, 46, 0.08);
+  --shadow:       0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.05);
+  --warn:         #ea580c;
+  --code-bg:      #111827;
+  --code-fg:      #e5e7eb;
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --text:#9ca3af; --text-h:#f9fafb; --bg:#1f2937; --surface:#111827; --border:#374151;
+    --accent:#f87171; --accent-light: rgba(248,113,113,.12);
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.2);
+    --code-bg:#0b0f17; --code-fg:#cbd5e1;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --text:#9ca3af; --text-h:#f9fafb; --bg:#1f2937; --surface:#111827; --border:#374151;
+  --accent:#f87171; --accent-light: rgba(248,113,113,.12);
+  --shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.2);
+  --code-bg:#0b0f17; --code-fg:#cbd5e1;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  color: var(--text); background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+  padding: 24px 16px 48px;
+}
+h1, h2 { margin: 0; font-weight: 600; color: var(--text-h); }
+p { margin: 0; }
+button { cursor: pointer; font-family: inherit; }
+
+.wrap { max-width: 1240px; margin: 0 auto; }
+
+.demo-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: var(--accent-light); color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; font-size: 12.5px; font-weight: 600;
+  margin-bottom: 20px;
+}
+.demo-banner svg { flex: none; width: 16px; height: 16px; margin-top: 1px; }
+
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.page-head h1 { font-size: 22px; }
+.page-head__sub { font-size: 13px; margin-top: 4px; }
+
+.card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 20px; margin-bottom: 20px; }
+.card__title { font-size: 15px; }
+
+.layout { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+
+.table-nav { display: flex; flex-direction: column; gap: 4px; }
+.table-nav__item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  text-align: left; width: 100%;
+  border: 1px solid transparent; background: none;
+  border-radius: 8px; padding: 9px 12px; font-size: 13px; color: var(--text-h);
+}
+.table-nav__item small { font-size: 11px; color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.table-nav__item.is-active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+.table-nav__item.is-active small { color: var(--accent); opacity: .8; }
+.table-nav__item:hover:not(.is-active) { background: var(--surface); }
+.table-nav__new {
+  margin-top: 8px; border: 1px dashed var(--border); border-radius: 8px; padding: 9px 12px;
+  font-size: 12px; color: var(--text); background: none; text-align: left;
+}
+
+.toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.toolbar__filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.kpi-settings__input, .kpi-settings__year-select {
+  border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
+  border-radius: 7px; padding: 7px 10px; font-size: 13px;
+}
+
+.table-wrap { overflow-x: auto; }
+.leaderboard { width: 100%; border-collapse: collapse; font-size: 13px; }
+.leaderboard th {
+  text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text); border-bottom: 1px solid var(--border); padding: 8px 10px; white-space: nowrap;
+}
+.leaderboard td { padding: 9px 10px; border-bottom: 1px solid var(--border); color: var(--text-h); white-space: nowrap; }
+.leaderboard tbody tr:hover { background: var(--surface); }
+.leaderboard__rank { color: var(--text); width: 30px; }
+.leaderboard__name { font-weight: 600; }
+.leaderboard__page-btn { border: 1px solid var(--border); background: var(--bg); color: var(--text-h); border-radius: 6px; padding: 4px 11px; font-size: 12.5px; }
+.leaderboard__page-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.win-rate { padding: 3px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 700; }
+.win-rate--high { background: rgba(34,197,94,.12); color: #16a34a; }
+.win-rate--low  { background: rgba(234,88,12,.12);  color: var(--warn); }
+
+.missing { color: var(--warn); font-weight: 600; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.secret { display:inline-flex; align-items:center; gap:6px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text); }
+.secret button { border: 1px solid var(--border); background: var(--bg); border-radius: 5px; font-size: 11px; padding: 2px 7px; color: var(--text); }
+
+.schema-toggle { font-size: 12px; color: var(--accent); background: none; border: none; text-decoration: underline; padding: 0; margin-top: 2px; }
+.schema-box {
+  display: none; margin-top: 14px; border-radius: 8px; overflow: auto; max-height: 280px;
+  background: var(--code-bg); color: var(--code-fg);
+}
+.schema-box.is-open { display: block; }
+.schema-box pre { margin: 0; padding: 14px 16px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.6; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.modal-overlay.is-open { display: flex; }
+.modal-box { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); width: 440px; max-width: 100%; padding: 24px; }
+.modal-box__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+.modal-box__close { border: none; background: none; font-size: 16px; color: var(--text); line-height: 1; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-h); margin-bottom: 14px; }
+.field input, .field select { border: 1px solid var(--border); background: var(--bg); color: var(--text-h); border-radius: 7px; padding: 7px 10px; font-size: 13px; font-family: inherit; }
+.modal-box__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.btn-primary { background: var(--accent); border: 1px solid var(--accent); color: #fff; border-radius: 7px; padding: 8px 16px; font-size: 13px; font-weight: 600; }
+.btn-ghost { background: var(--bg); border: 1px solid var(--border); color: var(--text-h); border-radius: 7px; padding: 8px 16px; font-size: 13px; }
+</style>
+
+<div class="wrap">
+  <div class="demo-banner">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+    <span>Demo kiến trúc <b>metadata-driven</b>: table + form bên dưới được vẽ ra 100% từ 1 object config/bảng (mô phỏng schema đọc từ Dataverse EntityDefinitions) — không có code vẽ UI riêng cho từng bảng. Bấm "Hãng sản xuất" ở danh sách trái để thấy 1 bảng "mới" chạy được ngay chỉ bằng thêm config.</span>
+  </div>
+
+  <div class="page-head">
+    <div>
+      <h1>Reference Data</h1>
+      <p class="page-head__sub" style="color:var(--text)">Danh sách bảng = whitelist config. Thêm bảng mới = thêm 1 entry, không viết thêm code.</p>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="card" style="padding:12px">
+      <div class="table-nav" id="table-nav"></div>
+      <button class="table-nav__new" onclick="alert('Demo — thêm 1 entry vào config whitelist ở backend, không cần deploy code mới')">+ Thêm bảng vào whitelist...</button>
+    </div>
+
+    <div class="card">
+      <div class="toolbar">
+        <div class="toolbar__filters">
+          <input class="kpi-settings__input" type="search" placeholder="Tìm trong bảng..." style="width:220px">
+        </div>
+        <button class="leaderboard__page-btn" style="border-color:var(--accent); color:var(--accent)" id="add-row-btn">+ Thêm dòng</button>
+      </div>
+      <div class="table-wrap">
+        <table class="leaderboard" id="data-table"></table>
+      </div>
+      <button class="schema-toggle" id="schema-toggle">Xem config của bảng này ▾</button>
+      <div class="schema-box" id="schema-box"><pre id="schema-pre"></pre></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal-box">
+    <div class="modal-box__head">
+      <h2 class="card__title" id="modal-title">Sửa</h2>
+      <button class="modal-box__close" id="modal-close">✕</button>
+    </div>
+    <div id="modal-body"></div>
+    <div class="modal-box__actions">
+      <button class="btn-ghost" id="modal-cancel">Hủy</button>
+      <button class="btn-primary" id="modal-save">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== Day la toan bo "config" cho tung bang — tuong duong voi thu backend
+   se tra ve tu GET /reference-data/{table}/schema khi doc Dataverse Attributes ===== */
+const TABLES = {
+  city: {
+    label: 'Tỉnh / Thành phố', logicalName: 'ab_city',
+    fields: [
+      { key: 'name',   label: 'Tên',        type: 'text' },
+      { key: 'code',   label: 'Mã GSO',     type: 'text' },
+      { key: 'status', label: 'Trạng thái', type: 'select', options: ['Active','Inactive'], badge: true },
+    ],
+    rows: [
+      { name: 'Tỉnh Long An',          code: '1801, VNM', status: 'Inactive' },
+      { name: 'Tỉnh Bình Dương',       code: '1802, VNM', status: 'Inactive' },
+      { name: 'Thành phố Hồ Chí Minh', code: '7901, VNM', status: 'Active'   },
+      { name: 'Tỉnh Tây Ninh',         code: '7902, VNM', status: 'Active'   },
+      { name: 'Thành phố Hà Nội',      code: '0100, VNM', status: 'Active'   },
+    ],
+  },
+  district: {
+    label: 'Xã / Phường', logicalName: 'ab_district',
+    fields: [
+      { key: 'name',   label: 'Tên',            type: 'text' },
+      { key: 'code',   label: 'Mã GSO',         type: 'text' },
+      { key: 'city',   label: 'Thuộc Tỉnh/TP',  type: 'lookup', lookupTable: 'city' },
+      { key: 'status', label: 'Trạng thái',     type: 'select', options: ['Active','Inactive'], badge: true },
+    ],
+    rows: [
+      { name: 'Phường Đức Hòa',      code: '79xxx', city: 'Tỉnh Tây Ninh',         status: 'Active'   },
+      { name: 'Xã Đức Hòa Hạ',       code: '79xxx', city: 'Tỉnh Tây Ninh',         status: 'Active'   },
+      { name: 'Huyện Đức Hoà',       code: '794',   city: 'Tỉnh Long An',          status: 'Inactive' },
+      { name: 'Phường Bình Dương',   code: '79xxx', city: 'Thành phố Hồ Chí Minh', status: 'Active'   },
+      { name: 'Quận Hai Bà Trưng',   code: '003',   city: 'Thành phố Hà Nội',      status: 'Inactive' },
+    ],
+  },
+  setting: {
+    label: 'Setting Master', logicalName: 'ab_setting_master',
+    fields: [
+      { key: 'name',  label: 'Name',  type: 'text' },
+      { key: 'id',    label: 'ID',    type: 'text', readonly: true },
+      { key: 'value', label: 'Value', type: 'text' },
+    ],
+    rows: [
+      { name: 'Using MAPS API (GoogleMaps or BingMaps)',               id: 'USING-MAP-API',              value: '(trống)' },
+      { name: 'Bing Map Secret Key',                                   id: 'BING-MAP-SECRET-KEY',        value: 'Am9vvL_4q0s••••••••••', secret: true },
+      { name: 'Auto populate Qty = Distance(km)×2 — Product Number',   id: 'PRODUCT-DISTANCE-CALCULATE', value: '(trống)' },
+      { name: 'WorkOrder SharePoint',                                  id: 'WORK-ORDER-SHAREPOINT',      value: 'ab_work_order5' },
+    ],
+  },
+  /* === bang "moi" duoc them vao chi bang config, dung chung render engine ben duoi === */
+  brand: {
+    label: 'Hãng sản xuất', logicalName: 'ab_brand', isNew: true,
+    fields: [
+      { key: 'name',   label: 'Tên hãng',  type: 'text' },
+      { key: 'origin', label: 'Xuất xứ',   type: 'select', options: ['Nhật Bản','Châu Âu','Trung Quốc','Việt Nam'] },
+      { key: 'status', label: 'Đang dùng', type: 'select', options: ['Active','Inactive'], badge: true },
+    ],
+    rows: [
+      { name: 'Cummins',    origin: 'Châu Âu',   status: 'Active' },
+      { name: 'Perkins',    origin: 'Châu Âu',   status: 'Active' },
+      { name: 'Mitsubishi', origin: 'Nhật Bản',  status: 'Active' },
+    ],
+  },
+};
+
+let current = 'city';
+
+function renderNav() {
+  const nav = document.getElementById('table-nav');
+  nav.innerHTML = Object.entries(TABLES).map(([key, t]) => `
+    <button class="table-nav__item ${key === current ? 'is-active' : ''}" onclick="selectTable('${key}')">
+      ${t.label} ${t.isNew ? '<span style="color:var(--accent);font-weight:700">· mới</span>' : ''}
+      <small>${t.logicalName}</small>
+    </button>
+  `).join('');
+}
+
+function badge(val) {
+  const cls = val === 'Active' ? 'win-rate--high' : 'win-rate--low';
+  const label = val === 'Active' ? 'Active' : 'Inactive';
+  return `<span class="win-rate ${cls}">${label}</span>`;
+}
+
+function cellValue(field, row) {
+  const raw = row[field.key];
+  if (field.secret_marker || (field.key === 'value' && row.secret)) {
+    return `<span class="secret">${raw} <button onclick="alert('Demo — giá trị thật ẩn vì lý do an toàn')">hiện</button></span>`;
+  }
+  if (field.type === 'select' && field.badge) return badge(raw);
+  if (raw === '(trống)') return `<span class="missing">${raw}</span>`;
+  if (field.readonly || field.type === 'text') return `<span class="mono">${raw}</span>`;
+  return raw ?? '—';
+}
+
+function renderTable() {
+  const t = TABLES[current];
+  const table = document.getElementById('data-table');
+  table.innerHTML = `
+    <thead><tr>
+      <th>#</th>
+      ${t.fields.map(f => `<th>${f.label}</th>`).join('')}
+      <th></th>
+    </tr></thead>
+    <tbody>
+      ${t.rows.map((row, i) => `
+        <tr>
+          <td class="leaderboard__rank">${i + 1}</td>
+          ${t.fields.map((f, fi) => `<td${fi === 0 ? ' class="leaderboard__name"' : ''}>${cellValue(f, row)}</td>`).join('')}
+          <td><button class="leaderboard__page-btn" onclick="openEdit(${i})">Sửa</button></td>
+        </tr>
+      `).join('')}
+    </tbody>
+  `;
+  document.getElementById('schema-pre').textContent = JSON.stringify({ logicalName: t.logicalName, fields: t.fields }, null, 2);
+}
+
+function selectTable(key) {
+  current = key;
+  renderNav();
+  renderTable();
+  document.getElementById('schema-box').classList.remove('is-open');
+  document.getElementById('schema-toggle').textContent = 'Xem config của bảng này ▾';
+}
+
+document.getElementById('schema-toggle').onclick = () => {
+  const box = document.getElementById('schema-box');
+  box.classList.toggle('is-open');
+  document.getElementById('schema-toggle').textContent = box.classList.contains('is-open') ? 'Ẩn config ▴' : 'Xem config của bảng này ▾';
+};
+
+const modal = document.getElementById('modal');
+function fieldInput(field, row) {
+  const val = row ? row[field.key] : '';
+  if (field.type === 'select') {
+    return `<select ${field.readonly ? 'disabled' : ''}>${field.options.map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+  }
+  if (field.type === 'lookup') {
+    const opts = TABLES[field.lookupTable].rows.map(r => r.name);
+    return `<select>${opts.map(o => `<option ${o === val ? 'selected' : ''}>${o}</option>`).join('')}</select>`;
+  }
+  return `<input value="${field.secret ? '' : (val ?? '')}" placeholder="${field.secret ? '(giữ nguyên nếu để trống)' : ''}" ${field.readonly ? 'readonly' : ''}>`;
+}
+
+function openEdit(i) {
+  const t = TABLES[current];
+  const row = t.rows[i];
+  document.getElementById('modal-title').textContent = 'Sửa — ' + (row.name || row.id);
+  document.getElementById('modal-body').innerHTML = t.fields.map(f => `
+    <div class="field">${f.label} ${fieldInput(f, row)}</div>
+  `).join('');
+  modal.classList.add('is-open');
+}
+document.getElementById('add-row-btn').onclick = () => openEdit(0);
+document.getElementById('modal-close').onclick = document.getElementById('modal-cancel').onclick = () => modal.classList.remove('is-open');
+document.getElementById('modal-save').onclick = () => modal.classList.remove('is-open');
+modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('is-open'); });
+
+renderNav();
+renderTable();
+</script>

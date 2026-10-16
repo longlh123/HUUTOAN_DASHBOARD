@@ -7,12 +7,14 @@ import { DailyReportPage } from './pages/DailyReportPage'
 import { ReconciliationPage } from './pages/ReconciliationPage'
 import { ProjectTrackingPage } from './pages/ProjectTrackingPage'
 import { ProjectTimelinePage } from './pages/ProjectTimelinePage'
+import { MaterialEntryPage } from './pages/MaterialEntryPage'
 import { WeeklyPulsePage } from './pages/WeeklyPulsePage'
 import { FinancePulsePage } from './pages/FinancePulsePage'
 import { ServicesDashboard } from './pages/ServicesDashboard'
 import { FinanceDashboard } from './pages/FinanceDashboard'
 import { KpiSettingsPage } from './pages/KpiSettingsPage'
 import { UsersPage } from './pages/UsersPage'
+import { ReferenceDataPage } from './pages/ReferenceDataPage'
 import { RequestTypePage } from './pages/RequestTypePage'
 import { DeviceDashboard } from './pages/DeviceDashboard'
 import { InvoicesPage } from './pages/InvoicesPage'
@@ -56,6 +58,7 @@ export default function App() {
             <Route path="/dashboard/sales/reconciliation" element={<ReconciliationPage />} />
             <Route path="/dashboard/sales/projects" element={<ProjectTrackingPage />} />
             <Route path="/dashboard/sales/projects/:code" element={<ProjectTimelinePage />} />
+            <Route path="/dashboard/sales/material-entry" element={<MaterialEntryPage />} />
             <Route path="/dashboard/services" element={<ServicesDashboard />} />
             <Route path="/dashboard/finance"   element={<FinanceDashboard />} />
             <Route path="/dashboard/finance/weekly-pulse" element={<FinancePulsePage />} />
@@ -63,6 +66,7 @@ export default function App() {
             <Route path="/invoices"                element={<InvoicesPage />} />
             <Route path="/settings/kpi"            element={<KpiSettingsPage />} />
             <Route path="/users"                   element={<UsersPage />} />
+            <Route path="/settings/reference-data" element={<ReferenceDataPage />} />
             <Route path="/analytics/request-type"  element={<RequestTypePage />} />
           </Route>
         </Routes>
