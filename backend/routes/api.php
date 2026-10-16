@@ -5,10 +5,12 @@ use App\Http\Controllers\Auth\AzureAuthController;
 use App\Http\Controllers\Dashboard\DeviceController;
 use App\Http\Controllers\Dashboard\FinanceController;
 use App\Http\Controllers\Dashboard\InvoiceController;
+use App\Http\Controllers\Dashboard\ItemCatalogController;
 use App\Http\Controllers\Dashboard\KpiController;
 use App\Http\Controllers\Dashboard\KpiTeamController;
 use App\Http\Controllers\Dashboard\OpportunitiesController;
 use App\Http\Controllers\Dashboard\ProjectTrackingController;
+use App\Http\Controllers\Dashboard\ReferenceDataController;
 use App\Http\Controllers\Dashboard\SalesController;
 use App\Http\Controllers\Dashboard\UsersController;
 use App\Http\Middleware\EnforceTerritory;
@@ -104,6 +106,15 @@ Route::middleware(['auth:sanctum', EnforceTerritory::class])
         Route::get('/sales/kpi-quarterly', [SalesController::class,  'kpiQuarterly']);
         Route::get('/users', [UsersController::class,  'index']);
         Route::put('/users/{id}', [UsersController::class,  'update']);
+
+        Route::get('/items/search', [ItemCatalogController::class, 'search']);
+
+        Route::get('/reference-data', [ReferenceDataController::class, 'tables']);
+        Route::get('/reference-data/{table}/schema', [ReferenceDataController::class, 'schema']);
+        Route::get('/reference-data/{table}/options', [ReferenceDataController::class, 'options']);
+        Route::get('/reference-data/{table}', [ReferenceDataController::class, 'index']);
+        Route::post('/reference-data/{table}', [ReferenceDataController::class, 'store']);
+        Route::put('/reference-data/{table}/{id}', [ReferenceDataController::class, 'update']);
 
         Route::get('/finance/summary', [FinanceController::class, 'summary']);
         Route::get('/finance/by-period', [FinanceController::class, 'byPeriod']);
