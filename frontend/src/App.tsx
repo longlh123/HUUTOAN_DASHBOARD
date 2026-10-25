@@ -8,7 +8,7 @@ import { ReconciliationPage } from './pages/ReconciliationPage'
 import { ProjectTrackingPage } from './pages/ProjectTrackingPage'
 import { ProjectTimelinePage } from './pages/ProjectTimelinePage'
 import { MaterialEntryPage } from './pages/MaterialEntryPage'
-import { WeeklyPulsePage } from './pages/WeeklyPulsePage'
+import { ItemsPage } from './pages/ItemsPage'
 import { FinancePulsePage } from './pages/FinancePulsePage'
 import { ServicesDashboard } from './pages/ServicesDashboard'
 import { FinanceDashboard } from './pages/FinanceDashboard'
@@ -53,12 +53,12 @@ export default function App() {
             </ProtectedRoute>
           }>
             <Route path="/dashboard/sales"    element={<SalesDashboard />} />
-            <Route path="/dashboard/sales/weekly-pulse" element={<WeeklyPulsePage />} />
             <Route path="/dashboard/sales/daily-report" element={<DailyReportPage />} />
             <Route path="/dashboard/sales/reconciliation" element={<ReconciliationPage />} />
             <Route path="/dashboard/sales/projects" element={<ProjectTrackingPage />} />
             <Route path="/dashboard/sales/projects/:code" element={<ProjectTimelinePage />} />
             <Route path="/dashboard/sales/material-entry" element={<MaterialEntryPage />} />
+            <Route path="/dashboard/items"     element={<ItemsPage />} />
             <Route path="/dashboard/services" element={<ServicesDashboard />} />
             <Route path="/dashboard/finance"   element={<FinanceDashboard />} />
             <Route path="/dashboard/finance/weekly-pulse" element={<FinancePulsePage />} />

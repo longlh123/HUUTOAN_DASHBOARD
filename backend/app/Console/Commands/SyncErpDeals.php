@@ -42,6 +42,8 @@ class SyncErpDeals extends Command
                 'invoice_date' => Carbon::parse($r['closedon'])->toDateString(),
                 'source_created_at' => $r['createdon'] ? Carbon::parse($r['createdon'])->toDateString() : null,
                 'resolved_value' => $r['resolved_value'],
+                'sales_order_number' => $r['sales_order_number'] ?? null,
+                'original_sales_order_number' => $r['original_sales_order_number'] ?? null,
                 'owner_id' => $r['_ownerid_value'],
                 'owner_name' => $r['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?: null,
                 'team_id' => $r['_owningbusinessunit_value'],
@@ -54,7 +56,7 @@ class SyncErpDeals extends Command
                 DB::table('erp_synced_deals')->upsert(
                     $rows,
                     ['external_key'],
-                    ['source', 'invoice_date', 'source_created_at', 'resolved_value', 'owner_id', 'owner_name', 'team_id', 'team_name', 'updated_at']
+                    ['source', 'invoice_date', 'source_created_at', 'resolved_value', 'sales_order_number', 'original_sales_order_number', 'owner_id', 'owner_name', 'team_id', 'team_name', 'updated_at']
                 );
             }
 

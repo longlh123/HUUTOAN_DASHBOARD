@@ -56,6 +56,7 @@ class KpiTeamController extends Controller
             'year' => 'required|integer|min:2020|max:2100',
             'team_id' => 'required|string|max:36',
             'team_name' => 'required|string|max:255',
+            'department' => 'nullable|string|max:255',
             'q1' => 'nullable|integer|min:0',
             'q2' => 'nullable|integer|min:0',
             'q3' => 'nullable|integer|min:0',
@@ -72,6 +73,7 @@ class KpiTeamController extends Controller
             'year' => $v['year'],
             'team_id' => $v['team_id'],
             'team_name' => $v['team_name'],
+            'department' => $v['department'] ?? null,
             'q1' => $v['q1'] ?? 0,
             'q2' => $v['q2'] ?? 0,
             'q3' => $v['q3'] ?? 0,
@@ -84,6 +86,7 @@ class KpiTeamController extends Controller
     public function updateTeamTarget(Request $request, int $id): JsonResponse
     {
         $v = $request->validate([
+            'department' => 'nullable|string|max:255',
             'q1' => 'nullable|integer|min:0',
             'q2' => 'nullable|integer|min:0',
             'q3' => 'nullable|integer|min:0',
@@ -92,6 +95,7 @@ class KpiTeamController extends Controller
 
         $target = KpiTeamTarget::findOrFail($id);
         $target->update([
+            'department' => $v['department'] ?? $target->department,
             'q1' => $v['q1'] ?? 0,
             'q2' => $v['q2'] ?? 0,
             'q3' => $v['q3'] ?? 0,
@@ -115,6 +119,7 @@ class KpiTeamController extends Controller
             'year' => $t->year,
             'team_id' => $t->team_id,
             'team_name' => $t->team_name,
+            'department' => $t->department,
             'q1' => $t->q1,
             'q2' => $t->q2,
             'q3' => $t->q3,

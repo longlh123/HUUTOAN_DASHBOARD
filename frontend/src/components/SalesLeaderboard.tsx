@@ -41,8 +41,27 @@ export function SalesLeaderboard({ territory, department, range }: Props) {
       .finally(() => { setLoading(false); setFetching(false) })
   }, [territory, department, range, quarter])
 
-  const teams    = Array.from(new Set(data.map(r => r.team).filter(Boolean))).sort()
-  const filtered = teamFilter === 'ALL' ? data : data.filter(r => r.team === teamFilter)
+  const teams = Array.from(new Set(data.flatMap(r => r.team_breakdown.map(b => b.team_name)))).sort()
+
+  // Loc theo 1 team cu the: dung dung phan doanh so cua team do (team_breakdown) thay vi total_value
+  // tong — nguoi da doi team giua ky se khong bi gan het doanh so ve team hien tai nua.
+  const filtered = teamFilter === 'ALL'
+    ? data
+    : data
+        .flatMap(r => {
+          const b = r.team_breakdown.find(b => b.team_name === teamFilter)
+          if (!b) return []
+          return [{
+            ...r,
+            total_value: b.total_value,
+            deals: b.deals,
+            lost_deals: b.lost_deals,
+            win_rate: b.win_rate,
+            avg_deal_size: b.avg_deal_size,
+            avg_days_to_close: b.avg_days_to_close,
+          }]
+        })
+        .sort((a, b) => b.total_value - a.total_value)
 
   const attainment = (() => {
     const withKpi = filtered.filter(r => r.kpi && r.kpi > 0)

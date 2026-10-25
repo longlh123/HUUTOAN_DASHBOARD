@@ -40,10 +40,11 @@ function potentialColor(label: string): string {
   }
 }
 
-const WEEKLY_CHANGE_ROWS: { key: 'new' | 'won' | 'lost'; label: string; color: string }[] = [
-  { key: 'new',  label: 'Moi mo',        color: '#6b7280' },
-  { key: 'won',  label: 'Thang (Won)',   color: '#16a34a' },
-  { key: 'lost', label: 'Thua (Lost)',   color: '#ea580c' },
+const WEEKLY_CHANGE_ROWS: { key: 'new_no_quote' | 'new_with_draft' | 'won' | 'lost'; label: string; color: string }[] = [
+  { key: 'new_no_quote',   label: 'Chua co quote',    color: '#6b7280' },
+  { key: 'new_with_draft', label: 'Co quote draft',   color: '#0ea5e9' },
+  { key: 'won',            label: 'Thang (Won)',                color: '#16a34a' },
+  { key: 'lost',           label: 'Thua (Lost)',                color: '#ea580c' },
 ]
 
 function PotentialBreakdown({ items, total }: { items: PotentialData[]; total: number }) {

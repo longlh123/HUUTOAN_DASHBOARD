@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ItemCatalogEntry } from '../api/sales'
 import { fetchItemCatalog } from '../api/sales'
+import type { ItemLevelOption } from '../api/items'
+import { fetchItemLevel1Options, fetchItemLevel2Options } from '../api/items'
 
 type Row = {
   id: string
@@ -9,27 +11,57 @@ type Row = {
   query: string
   qty: string
   remark: string
+  level1: number | null
+  level2: number | null
+}
+
+// 1 "thanh pham" (vd "Hộp thoát nhiệt KT: 1040x600mm") — tuong ung dong in dam khong co Item Code
+// trong file BOQ Excel goc, gom nhieu dong vat tu cau thanh ben duoi. Vat tu KHONG thuoc thanh pham
+// nao thi nam thang trong danh sach rieng (looseRows), khong bat buoc phai co thanh pham.
+type Product = {
+  id: string
+  name: string
+  rows: Row[]
+}
+
+type Draft = {
+  looseRows: Row[]
+  products: Product[]
 }
 
 const DRAFT_KEY = 'ht_material_entry_draft'
 
-function loadDraft(): Row[] | null {
+function loadDraft(): Draft | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) && parsed.length ? parsed : null
+    // Draft cu (truoc khi tach thanh pham/vat tu roi) co cau truc khac — bo qua thay vi crash.
+    const isValid = parsed && Array.isArray(parsed.looseRows) && Array.isArray(parsed.products)
+    return isValid ? parsed : null
   } catch {
     return null
   }
 }
 
-function saveDraft(rows: Row[]): void {
-  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(rows)) } catch { /* ignore */ }
+function saveDraft(draft: Draft): void {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)) } catch { /* ignore */ }
 }
 
 function emptyRow(): Row {
-  return { id: `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`, item: null, query: '', qty: '', remark: '' }
+  return {
+    id: `r${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+    item: null, query: '', qty: '', remark: '',
+    level1: null, level2: null,
+  }
+}
+
+function emptyProduct(): Product {
+  return {
+    id: `p${Date.now()}${Math.random().toString(36).slice(2, 6)}`,
+    name: '',
+    rows: [],
+  }
 }
 
 function rowComplete(row: Row): boolean {
@@ -144,25 +176,171 @@ function ItemCombobox({ value, query, onQueryChange, onSelect }: {
   )
 }
 
+// ── 1 dong vat tu — dung chung cho ca vat tu roi lan vat tu ben trong 1 nhom ──
+function MaterialRowTr({ row, level1Options, level2Options, onUpdateRow, onRemoveRow }: {
+  row:            Row
+  level1Options:  ItemLevelOption[]
+  level2Options:  ItemLevelOption[]
+  onUpdateRow:    (patch: Partial<Row>) => void
+  onRemoveRow:    () => void
+}) {
+  const incomplete = !rowComplete(row) && (row.query || row.qty)
+  return (
+    <tr className={incomplete ? 'material-entry__row--incomplete' : ''}>
+      <td>
+        <span className={row.item ? 'material-entry__code' : 'material-entry__code material-entry__code--empty'}>
+          {row.item?.item_number || 'chưa chọn'}
+        </span>
+      </td>
+      <td>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ flex: 2 }}>
+            <ItemCombobox
+              value={row.item}
+              query={row.query}
+              onQueryChange={q => onUpdateRow({ query: q, item: null, level1: null, level2: null })}
+              onSelect={item => onUpdateRow({
+                item, query: item.name ?? item.item_number,
+                // Neu erp_installation_items da ghi nhan san level1/2 cho item nay thi mac dinh
+                // chon theo, con khong co thi de trong cho nguoi dung tu nhap.
+                level1: item.level1 ?? null,
+                level2: item.level2 ?? null,
+              })}
+            />
+          </div>
+          <select
+            className="kpi-settings__input"
+            style={{ flex: 1, textAlign: 'left' }}
+            value={row.level1 ?? ''}
+            onChange={e => onUpdateRow({ level1: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Level 1</option>
+            {level1Options.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+          </select>
+          <select
+            className="kpi-settings__input"
+            style={{ flex: 1, textAlign: 'left' }}
+            value={row.level2 ?? ''}
+            onChange={e => onUpdateRow({ level2: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Level 2</option>
+            {level2Options.map(o => <option key={o.code} value={o.code}>{o.label}</option>)}
+          </select>
+        </div>
+      </td>
+      <td className={row.item?.unit ? undefined : 'material-entry__muted'}>{row.item?.unit || '—'}</td>
+      <td style={{ textAlign: 'right' }}>
+        <input
+          className="kpi-settings__input material-entry__qty"
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="0.00"
+          value={row.qty}
+          onChange={e => onUpdateRow({ qty: e.target.value })}
+        />
+      </td>
+      <td>
+        <input
+          className="kpi-settings__input material-entry__name-input"
+          placeholder="Ghi chú (tuỳ chọn)"
+          value={row.remark}
+          onChange={e => onUpdateRow({ remark: e.target.value })}
+        />
+      </td>
+      <td>
+        <button className="material-entry__remove-btn" type="button" aria-label="Xoá dòng" onClick={onRemoveRow}>
+          ✕
+        </button>
+      </td>
+    </tr>
+  )
+}
+
+// ── Dong tieu de 1 nhom (highlight nen) — ten nhom + nut them vat tu/xoa nhom ──
+function GroupHeaderTr({ name, index, onRename, onAddRow, onRemove }: {
+  name:      string
+  index:     number
+  onRename:  (name: string) => void
+  onAddRow:  () => void
+  onRemove:  () => void
+}) {
+  return (
+    <tr className="material-entry__group-row">
+      <td colSpan={2}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: 13, whiteSpace: 'nowrap' }}>📁 Nhóm #{index + 1}</span>
+          <input
+            className="kpi-settings__input material-entry__name-input"
+            style={{ flex: 1, fontWeight: 600, textAlign: 'left' }}
+            placeholder='Tên nhóm — VD: Hộp thoát nhiệt KT: 1040x600mm'
+            value={name}
+            onChange={e => onRename(e.target.value)}
+          />
+        </div>
+      </td>
+      <td colSpan={3}></td>
+      <td style={{ whiteSpace: 'nowrap' }}>
+        <button className="material-entry__add-icon-btn" type="button" aria-label="Thêm vật tư vào nhóm" onClick={onAddRow}>+</button>
+        <button className="material-entry__remove-btn" type="button" aria-label="Xoá nhóm" onClick={onRemove}>✕</button>
+      </td>
+    </tr>
+  )
+}
+
 export function MaterialEntryPage() {
   const [quoteRef, setQuoteRef] = useState('')
   const [groupLabel, setGroupLabel] = useState('')
-  const [rows, setRows] = useState<Row[]>(() => loadDraft() ?? [emptyRow()])
+  const [looseRows, setLooseRows] = useState<Row[]>(() => loadDraft()?.looseRows ?? [emptyRow()])
+  const [products, setProducts] = useState<Product[]>(() => loadDraft()?.products ?? [])
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [level1Options, setLevel1Options] = useState<ItemLevelOption[]>([])
+  const [level2Options, setLevel2Options] = useState<ItemLevelOption[]>([])
 
-  useEffect(() => { saveDraft(rows) }, [rows])
+  useEffect(() => {
+    fetchItemLevel1Options().then(setLevel1Options).catch(() => { /* ignore — combobox chi la tien ich */ })
+    fetchItemLevel2Options().then(setLevel2Options).catch(() => { /* ignore — combobox chi la tien ich */ })
+  }, [])
 
-  function updateRow(id: string, patch: Partial<Row>) {
-    setRows(rs => rs.map(r => (r.id === id ? { ...r, ...patch } : r)))
+  useEffect(() => { saveDraft({ looseRows, products }) }, [looseRows, products])
+
+  function updateLooseRow(rowId: string, patch: Partial<Row>) {
+    setLooseRows(rs => rs.map(r => (r.id === rowId ? { ...r, ...patch } : r)))
   }
 
-  function addRow() {
-    setRows(rs => [...rs, emptyRow()])
+  function addLooseRow() {
+    setLooseRows(rs => [...rs, emptyRow()])
   }
 
-  function removeRow(id: string) {
-    setRows(rs => rs.filter(r => r.id !== id))
+  function removeLooseRow(rowId: string) {
+    setLooseRows(rs => rs.filter(r => r.id !== rowId))
+  }
+
+  function updateProduct(productId: string, patch: Partial<Product>) {
+    setProducts(ps => ps.map(p => (p.id === productId ? { ...p, ...patch } : p)))
+  }
+
+  function addProduct() {
+    setProducts(ps => [...ps, emptyProduct()])
+  }
+
+  function removeProduct(productId: string) {
+    setProducts(ps => ps.filter(p => p.id !== productId))
+  }
+
+  function updateProductRow(productId: string, rowId: string, patch: Partial<Row>) {
+    setProducts(ps => ps.map(p => (
+      p.id === productId ? { ...p, rows: p.rows.map(r => (r.id === rowId ? { ...r, ...patch } : r)) } : p
+    )))
+  }
+
+  function addProductRow(productId: string) {
+    setProducts(ps => ps.map(p => (p.id === productId ? { ...p, rows: [...p.rows, emptyRow()] } : p)))
+  }
+
+  function removeProductRow(productId: string, rowId: string) {
+    setProducts(ps => ps.map(p => (p.id === productId ? { ...p, rows: p.rows.filter(r => r.id !== rowId) } : p)))
   }
 
   function showToast(msg: string) {
@@ -172,16 +350,17 @@ export function MaterialEntryPage() {
   }
 
   function handleSave() {
-    const valid = rows.filter(rowComplete)
+    const valid = [...looseRows, ...products.flatMap(p => p.rows)].filter(rowComplete)
     showToast(
       quoteRef.trim()
-        ? `Demo: sẽ tạo ${valid.length} dòng Quote Product cho ${quoteRef.trim()} (chưa kết nối CRM thật).`
+        ? `Demo: sẽ tạo ${valid.length} dòng Quote Product cho ${quoteRef.trim()} (${products.length} thành phẩm) (chưa kết nối CRM thật).`
         : 'Nhập mã Quote/WO trước khi lưu.'
     )
   }
 
-  const totalCount = rows.length
-  const validCount = rows.filter(rowComplete).length
+  const allRows = [...looseRows, ...products.flatMap(p => p.rows)]
+  const totalCount = allRows.length
+  const validCount = allRows.filter(rowComplete).length
 
   return (
     <div className="dashboard">
@@ -218,7 +397,9 @@ export function MaterialEntryPage() {
         </div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      {/* 1 bang duy nhat — cac nhom truoc, vat tu roi (khong thuoc nhom nao) nam cuoi cung, giong
+          dung thu tu file BOQ Excel goc ("Phu kien lap dat" khong nhom luon o cuoi) */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
         <div className="table-wrap">
           <table className="leaderboard material-entry__table">
             <thead>
@@ -228,66 +409,51 @@ export function MaterialEntryPage() {
                 <th style={{ width: 70 }}>ĐVT</th>
                 <th style={{ width: 100, textAlign: 'right' }}>Số lượng</th>
                 <th>Ghi chú</th>
-                <th style={{ width: 36 }}></th>
+                <th style={{ width: 60 }}></th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(row => {
-                const incomplete = !rowComplete(row) && (row.query || row.qty)
-                return (
-                  <tr key={row.id} className={incomplete ? 'material-entry__row--incomplete' : ''}>
-                    <td>
-                      <span className={row.item ? 'material-entry__code' : 'material-entry__code material-entry__code--empty'}>
-                        {row.item?.item_number || 'chưa chọn'}
-                      </span>
-                    </td>
-                    <td>
-                      <ItemCombobox
-                        value={row.item}
-                        query={row.query}
-                        onQueryChange={q => updateRow(row.id, { query: q, item: null })}
-                        onSelect={item => updateRow(row.id, { item, query: item.name ?? item.item_number })}
-                      />
-                    </td>
-                    <td className={row.item?.unit ? undefined : 'material-entry__muted'}>{row.item?.unit || '—'}</td>
-                    <td style={{ textAlign: 'right' }}>
-                      <input
-                        className="kpi-settings__input material-entry__qty"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="0.00"
-                        value={row.qty}
-                        onChange={e => updateRow(row.id, { qty: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        className="kpi-settings__input material-entry__name-input"
-                        placeholder="Ghi chú (tuỳ chọn)"
-                        value={row.remark}
-                        onChange={e => updateRow(row.id, { remark: e.target.value })}
-                      />
-                    </td>
-                    <td>
-                      <button
-                        className="material-entry__remove-btn"
-                        type="button"
-                        aria-label="Xoá dòng"
-                        onClick={() => removeRow(row.id)}
-                      >
-                        ✕
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
+              {products.map((product, pi) => (
+                <Fragment key={product.id}>
+                  <GroupHeaderTr
+                    name={product.name}
+                    index={pi}
+                    onRename={name => updateProduct(product.id, { name })}
+                    onAddRow={() => addProductRow(product.id)}
+                    onRemove={() => removeProduct(product.id)}
+                  />
+                  {product.rows.map(row => (
+                    <MaterialRowTr
+                      key={row.id}
+                      row={row}
+                      level1Options={level1Options}
+                      level2Options={level2Options}
+                      onUpdateRow={patch => updateProductRow(product.id, row.id, patch)}
+                      onRemoveRow={() => removeProductRow(product.id, row.id)}
+                    />
+                  ))}
+                </Fragment>
+              ))}
+
+              {looseRows.map(row => (
+                <MaterialRowTr
+                  key={row.id}
+                  row={row}
+                  level1Options={level1Options}
+                  level2Options={level2Options}
+                  onUpdateRow={patch => updateLooseRow(row.id, patch)}
+                  onRemoveRow={() => removeLooseRow(row.id)}
+                />
+              ))}
             </tbody>
           </table>
         </div>
         <div className="material-entry__footer">
           <span>{totalCount} dòng · {validCount} dòng đã đủ thông tin</span>
-          <button className="kpi-settings__save-btn" type="button" onClick={addRow}>+ Thêm dòng</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="kpi-settings__save-btn" type="button" onClick={addLooseRow}>+ Thêm vật tư</button>
+            <button className="kpi-settings__save-btn" type="button" onClick={addProduct}>+ Tạo nhóm</button>
+          </div>
         </div>
       </div>
 

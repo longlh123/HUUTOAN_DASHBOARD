@@ -12,6 +12,17 @@ export type PeriodData = {
   deals: number
 }
 
+export type RepTeamBreakdown = {
+  team_id: string
+  team_name: string
+  total_value: number
+  deals: number
+  lost_deals: number
+  win_rate: number
+  avg_deal_size: number
+  avg_days_to_close: number | null
+}
+
 export type RepData = {
   owner_id: string
   name: string
@@ -23,6 +34,7 @@ export type RepData = {
   avg_deal_size: number
   avg_days_to_close: number | null
   kpi: number | null
+  team_breakdown: RepTeamBreakdown[]
 }
 
 export type TeamData = {
@@ -85,7 +97,8 @@ export type PipelineChangeItem = {
 }
 
 export type PipelineWeeklyChanges = {
-  new:  PipelineChangeItem
+  new_no_quote:   PipelineChangeItem
+  new_with_draft: PipelineChangeItem
   won:  PipelineChangeItem
   lost: PipelineChangeItem
 }
@@ -601,9 +614,6 @@ export const fetchErpReconciliation = (range: DateRange, department?: string) =>
 export const fetchRequestTypeCrosstab = (year: number, territory: string, department?: string) =>
   apiFetch<RequestTypeCrosstab>(`${BASE}/request-type?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)
 
-export const fetchKpiQuarterly = (year: number, territory: string, department?: string) =>
-  apiFetch<KpiQuarterly>(`${BASE}/kpi-quarterly?${new URLSearchParams({ year: String(year), territory, ...(department ? { department } : {}) })}`)
-
 export const fetchFinanceSummary  = (range: DateRange, territory: string) =>
   apiFetch<FinanceSummary>(`${FINANCE_BASE}/summary?${qs(range, { territory })}`)
 
@@ -724,6 +734,8 @@ export type ItemCatalogEntry = {
   item_number: string
   name:        string | null
   unit:        string | null
+  level1:      number | null
+  level2:      number | null
 }
 
 export const fetchItemCatalog = (q: string) =>

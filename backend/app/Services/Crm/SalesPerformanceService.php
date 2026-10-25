@@ -8,6 +8,7 @@ use App\Services\Erp\ErpSalesAttributionService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class SalesPerformanceService
 {
@@ -81,6 +82,8 @@ class SalesPerformanceService
     {
         $wonQuotes = $this->wonDealsFor($from, $to, $territory, $department);
         $kpiByRep = $this->kpiByRep($from->year);
+        $teamHistory = $this->fetchTeamHistory();
+        $resolveTeam = fn ($row) => $this->resolveTeam($row, $teamHistory);
 
         // Group by owner FIRST — mỗi người tính calcOppValue trên quotes của chính họ
         $wonByOwner = $wonQuotes->groupBy('_ownerid_value');
@@ -94,7 +97,7 @@ class SalesPerformanceService
         $lostByOwner = $lostOpps->groupBy('_ownerid_value');
         $allOwnerIds = $wonByOwner->keys()->merge($lostByOwner->keys())->unique();
 
-        return $allOwnerIds->map(function ($ownerId) use ($wonByOwner, $lostByOwner, $kpiByRep) {
+        return $allOwnerIds->map(function ($ownerId) use ($wonByOwner, $lostByOwner, $kpiByRep, $resolveTeam) {
             $ownerWon = $wonByOwner->get($ownerId, collect());
             $ownerLost = $lostByOwner->get($ownerId, collect());
 
@@ -111,6 +114,36 @@ class SalesPerformanceService
             $sampleWon = $ownerWon->first();
             $sampleLost = $ownerLost->first();
 
+            // Tach doanh so theo tung team da tung thuoc ve (qua crm_user_team_history) — dung khi
+            // UI filter theo 1 team cu the, de nguoi doi team giua ky khong bi gan het ve 1 team.
+            $teamBreakdown = $ownerOppRows->groupBy(fn ($q) => $resolveTeam($q)['id'])
+                ->keys()
+                ->merge($ownerLost->groupBy(fn ($o) => $resolveTeam($o)['id'])->keys())
+                ->unique()
+                ->filter()
+                ->map(function ($teamId) use ($ownerOppRows, $ownerLost, $resolveTeam) {
+                    $tWon = $ownerOppRows->filter(fn ($q) => $resolveTeam($q)['id'] === $teamId);
+                    $tLost = $ownerLost->filter(fn ($o) => $resolveTeam($o)['id'] === $teamId);
+                    $tValue = $tWon->sum('resolved_value');
+                    $tWonCount = $tWon->count();
+                    $tLostCount = $tLost->count();
+                    $tTotal = $tWonCount + $tLostCount;
+                    $tAvgDays = $tWon->avg(fn ($q) => max(0, Carbon::parse($q['createdon'])->diffInDays(Carbon::parse($q['closedon']))));
+                    $sample = $tWon->first() ?? $tLost->first();
+
+                    return [
+                        'team_id' => $teamId,
+                        'team_name' => $sample ? $resolveTeam($sample)['name'] : 'Unknown',
+                        'total_value' => $tValue,
+                        'deals' => $tWonCount,
+                        'lost_deals' => $tLostCount,
+                        'win_rate' => $tTotal > 0 ? round($tWonCount / $tTotal * 100, 1) : 0,
+                        'avg_deal_size' => $tWonCount > 0 ? round($tValue / $tWonCount) : 0,
+                        'avg_days_to_close' => $tWonCount > 0 ? (int) round($tAvgDays) : null,
+                    ];
+                })
+                ->values();
+
             return [
                 'owner_id' => $ownerId,
                 'name' => $sampleWon['_ownerid_value@OData.Community.Display.V1.FormattedValue']
@@ -126,6 +159,7 @@ class SalesPerformanceService
                 'avg_deal_size' => $wonCount > 0 ? round($totalValue / $wonCount) : 0,
                 'avg_days_to_close' => $wonCount > 0 ? (int) round($avgDays) : null,
                 'kpi' => $kpiByRep->get($ownerId) ?: null,
+                'team_breakdown' => $teamBreakdown->all(),
             ];
         })
             ->sortByDesc('total_value')
@@ -225,10 +259,28 @@ class SalesPerformanceService
             return [
                 'team_id' => $t->team_id,
                 'name' => $t->team_name,
+                'department' => $t->department,
                 'target_q' => $effective,
                 'target_year' => $raw,
             ];
         })->values();
+    }
+
+    // Map team_id (business unit GUID) -> department, lay tu TOAN BO roster hien tai (fetchUsers()),
+    // khong phu thuoc team co doanh so/deal hay khong — dung de khong lam mat department cua team
+    // co target nhung chua co deal nao trong ky (vd "BU Service" cua department SS).
+    private function teamDepartmentMap(): Collection
+    {
+        return $this->fetchUsers()
+            ->groupBy('_businessunitid_value')
+            ->map(fn ($members) => $members
+                ->map(fn ($u) => $u['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? null)
+                ->filter()
+                ->countBy()
+                ->sortDesc()
+                ->keys()
+                ->first() ?? ''
+            );
     }
 
     // KPI target ca nhan gio doc thang tu MySQL (kpi_member_targets, khong qua CRM nua) — tra ve
@@ -272,9 +324,17 @@ class SalesPerformanceService
         $wonQuotes = $this->wonDealsFor($from, $to, $territory, $department);
         $users = $this->fetchUsers();
         $kpiByTeam = $this->kpiByTeam($from->year);
+        $teamTargets = KpiTeamTarget::where('year', $from->year)->get()->keyBy('team_id');
+        $teamDeptMap = $this->teamDepartmentMap();
+        $teamHistory = $this->fetchTeamHistory();
+
+        // Group theo team da resolve qua crm_user_team_history (neu owner co doi team) thay vi
+        // doc thang _owningbusinessunit_value — field nay bi Dataverse tu dong ghi de ve BU hien tai
+        // tren MOI record cu cua user khi doi Business Unit, nen khong dung lam moc lich su duoc.
+        $resolveTeam = fn ($row) => $this->resolveTeam($row, $teamHistory);
 
         // Group by team FIRST — mỗi team tính calcOppValue trên quotes của chính team
-        $wonByTeam = $wonQuotes->groupBy('_owningbusinessunit_value');
+        $wonByTeam = $wonQuotes->groupBy(fn ($q) => $resolveTeam($q)['id']);
         $wonOppIds = $wonQuotes->pluck('_opportunityid_value')->filter()->unique()->all();
 
         $lostOpps = $this->filterByTerritory(
@@ -282,10 +342,27 @@ class SalesPerformanceService
             $territory
         )->filter(fn ($o) => ! in_array($o['opportunityid'], $wonOppIds));
 
-        $lostByTeam = $lostOpps->groupBy('_owningbusinessunit_value');
-        $allTeamIds = $wonByTeam->keys()->merge($lostByTeam->keys())->unique()->filter();
+        $lostByTeam = $lostOpps->groupBy(fn ($o) => $resolveTeam($o)['id']);
 
-        return $allTeamIds->map(function ($teamId) use ($wonByTeam, $lostByTeam, $users, $kpiByTeam) {
+        // Cong them team chi co KPI target nhung chua co deal nao trong ky (vd team moi lap, hoac
+        // chua ghi nhan doanh so) — khong thi team do bien mat hoan toan khoi bang xep hang du van
+        // co target that su. Loc theo department/territory ngay o day vi team nay khong co owner nao
+        // de filterByDepartment() xu ly duoc.
+        $targetOnlyTeamIds = $teamTargets->keys()->reject(function ($teamId) use ($wonByTeam, $lostByTeam, $teamTargets, $teamDeptMap, $department) {
+            if ($wonByTeam->has($teamId) || $lostByTeam->has($teamId)) {
+                return true;
+            }
+            if (! $department) {
+                return false;
+            }
+            $teamDept = $teamTargets->get($teamId)->department ?? $teamDeptMap->get($teamId) ?? '';
+
+            return $teamDept !== $department;
+        });
+
+        $allTeamIds = $wonByTeam->keys()->merge($lostByTeam->keys())->merge($targetOnlyTeamIds)->unique()->filter();
+
+        return $allTeamIds->map(function ($teamId) use ($wonByTeam, $lostByTeam, $users, $kpiByTeam, $resolveTeam, $teamTargets, $teamDeptMap) {
             $teamWon = $wonByTeam->get($teamId, collect());
             $teamLost = $lostByTeam->get($teamId, collect());
 
@@ -309,16 +386,17 @@ class SalesPerformanceService
             $deptId = $ownerIds->map(fn ($id) => $users->get($id)['_ab_dim_department_id_value'] ?? null)
                 ->filter()->countBy()->sortDesc()->keys()->first() ?? '';
             $deptName = $ownerIds->map(fn ($id) => $users->get($id)['_ab_dim_department_id_value@OData.Community.Display.V1.FormattedValue'] ?? null)
-                ->filter()->countBy()->sortDesc()->keys()->first() ?? '';
+                ->filter()->countBy()->sortDesc()->keys()->first()
+                ?? $teamTargets->get($teamId)?->department
+                ?? $teamDeptMap->get($teamId)
+                ?? '';
 
-            $sampleWon = $teamWon->first();
-            $sampleLost = $teamLost->first();
+            $sampleRow = $teamWon->first() ?? $teamLost->first();
+            $teamTarget = $teamTargets->get($teamId);
 
             return [
                 'team_id' => $teamId,
-                'name' => $sampleWon['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue']
-                    ?? $sampleLost['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue']
-                    ?? 'Unknown',
+                'name' => $sampleRow ? $resolveTeam($sampleRow)['name'] : ($teamTarget?->team_name ?? 'Unknown'),
                 'department_id' => $deptId,
                 'department' => $deptName,
                 'total_value' => $totalValue,
@@ -495,6 +573,7 @@ class SalesPerformanceService
         $accuQByTeam = $this->byTeam($qStart, $qEnd, $territory, null)->keyBy('name');
         $accuFyByTeam = $this->byTeam($yStart, $yEnd, $territory, null)->keyBy('name');
         $targetByTeam = $this->teamQuarterlyEffective($year, $territory)->keyBy('name');
+        $teamDeptMap = $this->teamDepartmentMap();
 
         $teamNames = $dayByTeam->keys()
             ->merge($weekByTeam->keys())
@@ -505,7 +584,7 @@ class SalesPerformanceService
             ->unique()
             ->values();
 
-        $rows = $teamNames->map(function ($name) use ($dayByTeam, $weekByTeam, $accuQByTeam, $accuFyByTeam, $targetByTeam, $quarter) {
+        $rows = $teamNames->map(function ($name) use ($dayByTeam, $weekByTeam, $accuQByTeam, $accuFyByTeam, $targetByTeam, $teamDeptMap, $quarter) {
             $dayTeamDeals = $dayByTeam->get($name, collect());
             $weekTeamDeals = $weekByTeam->get($name, collect());
             $accuQ = (float) ($accuQByTeam->get($name)['total_value'] ?? 0);
@@ -513,7 +592,11 @@ class SalesPerformanceService
             $target = $targetByTeam->get($name);
             $targetQ = (float) ($target['target_q'][$quarter] ?? 0);
             $targetFy = (float) ($target['target_year'] ?? 0);
-            $department = $accuFyByTeam->get($name)['department'] ?? $accuQByTeam->get($name)['department'] ?? '';
+            $department = $accuFyByTeam->get($name)['department']
+                ?? $accuQByTeam->get($name)['department']
+                ?? $target['department']
+                ?? $teamDeptMap->get($target['team_id'] ?? null)
+                ?? '';
 
             return [
                 'team' => $name,
@@ -972,10 +1055,28 @@ class SalesPerformanceService
         $won = $closedQuotes->filter(fn ($q) => (int) ($q['statecode'] ?? 0) === 2);
         $lost = $closedQuotes->filter(fn ($q) => (int) ($q['statecode'] ?? 0) === 3);
 
+        // Tach "moi mo" theo trang thai quote — estimatedvalue chi la uoc luong tay luc tao opp,
+        // khong phan anh gia tri thuc neu da co quote. Opp nao da co quote Won roi (tuy hiem, mo va
+        // chot luon trong tuan) thi khong tinh vao ca 2 nhanh nay nua — da duoc tinh trong "won" o tren.
+        $newOppIds = $newOpps->pluck('opportunityid')->filter()->unique()->values()->all();
+        $quotesByOpp = $this->resolveQuoteValues($this->fetchQuotesForOpps($newOppIds), $this->ttlFor($to))
+            ->groupBy('_opportunityid_value');
+
+        $noQuoteOpps = $newOpps->filter(fn ($o) => $quotesByOpp->get($o['opportunityid'], collect())->isEmpty());
+        $draftOpps = $newOpps->filter(function ($o) use ($quotesByOpp) {
+            $quotes = $quotesByOpp->get($o['opportunityid'], collect());
+
+            return $quotes->isNotEmpty() && $quotes->every(fn ($q) => (int) ($q['statecode'] ?? 0) !== 2);
+        });
+
         return [
-            'new' => [
-                'count' => $newOpps->count(),
-                'value' => (float) $newOpps->sum('estimatedvalue'),
+            'new_no_quote' => [
+                'count' => $noQuoteOpps->count(),
+                'value' => (float) $noQuoteOpps->sum('estimatedvalue'),
+            ],
+            'new_with_draft' => [
+                'count' => $draftOpps->count(),
+                'value' => (float) $draftOpps->sum(fn ($o) => $quotesByOpp->get($o['opportunityid'], collect())->max('resolved_value') ?? 0),
             ],
             'won' => [
                 'count' => $won->count(),
@@ -1000,6 +1101,27 @@ class SalesPerformanceService
         ], ttl: $this->ttlFor($to));
 
         return collect($data['value'] ?? []);
+    }
+
+    // Lay toan bo quote (moi state) cua 1 nhom opportunity — chunk 15 id/request giong
+    // fetchQuoteDetails(), dung cho pipelineWeeklyChanges() tach nhanh "moi mo" theo trang thai quote.
+    private function fetchQuotesForOpps(array $oppIds): Collection
+    {
+        if (empty($oppIds)) {
+            return collect();
+        }
+
+        $results = collect();
+        foreach (array_chunk($oppIds, 15) as $chunk) {
+            $filter = implode(' or ', array_map(fn ($id) => "_opportunityid_value eq {$id}", $chunk));
+            $data = $this->api->get('quotes', [
+                '$select' => 'quoteid,_opportunityid_value,statecode',
+                '$filter' => $filter,
+            ], ttl: 300);
+            $results = $results->merge($data['value'] ?? []);
+        }
+
+        return $results;
     }
 
     public function quarterlyGapChart(int $year, ?string $territory = null, ?string $department = null): array
@@ -1897,5 +2019,40 @@ class SalesPerformanceService
         $data = $this->api->get('systemusers', $this->fetchUsersParams(), ttl: 3600);
 
         return collect($data['value'] ?? [])->keyBy('systemuserid');
+    }
+
+    // Lich su doi Business Unit — nhap tay vao bang crm_user_team_history khi co nhan vien doi team.
+    // Dung de tinh doanh so theo team dung theo NGAY DONG DEAL, vi Dataverse tu dong ghi de
+    // _owningbusinessunit_value tren moi record cu ve BU hien tai moi khi user doi team.
+    private function fetchTeamHistory(): Collection
+    {
+        return DB::table('crm_user_team_history')
+            ->orderByDesc('effective_from')
+            ->get()
+            ->map(fn ($row) => (array) $row)
+            ->groupBy('crm_user_id');
+    }
+
+    // Tra team dung tai thoi diem deal dong: uu tien crm_user_team_history (ban ghi effective_from
+    // gan nhat ma <= ngay dong) neu owner co trong bang; khong co thi fallback ve
+    // _owningbusinessunit_value cua chinh record (hanh vi cu, dung cho nguoi chua tung doi team).
+    private function resolveTeam(array $row, Collection $teamHistory): array
+    {
+        $ownerId = $row['_ownerid_value'] ?? null;
+        $closedOn = $row['closedon'] ?? $row['actualclosedate'] ?? null;
+        $history = $ownerId ? $teamHistory->get($ownerId) : null;
+
+        if ($history && $closedOn) {
+            $closedAt = Carbon::parse($closedOn);
+            $match = $history->first(fn ($h) => Carbon::parse($h['effective_from'])->lte($closedAt));
+            if ($match) {
+                return ['id' => $match['business_unit_id'], 'name' => $match['business_unit_name']];
+            }
+        }
+
+        return [
+            'id' => $row['_owningbusinessunit_value'] ?? '',
+            'name' => $row['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue'] ?? 'Unknown',
+        ];
     }
 }

@@ -69,21 +69,6 @@ export function getFullWeekRange(): DateRange {
   return { from: toDateStr(monday), to: toDateStr(sunday) }
 }
 
-// Tuan Thu2-CN ngay truoc getFullWeekRange() — dung cho "tuan vua qua" trong trang tom tat hop.
-export function getLastFullWeekRange(): DateRange {
-  const cur  = getFullWeekRange()
-  const from = new Date(cur.from); from.setDate(from.getDate() - 7)
-  const to   = new Date(cur.to);   to.setDate(to.getDate() - 7)
-  return { from: toDateStr(from), to: toDateStr(to) }
-}
-
-// N tuan gan nhat tinh den hom nay — dung cho sparkline xu huong doanh thu.
-export function getLastNWeeksRange(weeks: number): DateRange {
-  const from = new Date()
-  from.setDate(from.getDate() - weeks * 7)
-  return { from: toDateStr(from), to: today() }
-}
-
 export function getThisMonthRange(): DateRange {
   const now = new Date()
   return getMonthRange(now.getFullYear(), now.getMonth() + 1)

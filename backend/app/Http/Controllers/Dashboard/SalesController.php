@@ -20,17 +20,6 @@ class SalesController extends Controller
         return $this->success($this->sales->users());
     }
 
-    public function kpiQuarterly(Request $request): JsonResponse
-    {
-        $year = (int) $request->query('year', now()->year);
-
-        return $this->success($this->sales->kpiQuarterlyTotals(
-            $year,
-            $request->query('territory'),
-            $request->query('department')
-        ));
-    }
-
     public function all(Request $request): JsonResponse
     {
         [$from, $to] = $this->parseDateRange($request);

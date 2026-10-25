@@ -103,11 +103,17 @@ Route::middleware(['auth:sanctum', EnforceTerritory::class])
         Route::get('/opportunities/activity', [OpportunitiesController::class, 'activity']);
 
         Route::get('/sales/users', [SalesController::class,  'users']);
-        Route::get('/sales/kpi-quarterly', [SalesController::class,  'kpiQuarterly']);
         Route::get('/users', [UsersController::class,  'index']);
         Route::put('/users/{id}', [UsersController::class,  'update']);
 
         Route::get('/items/search', [ItemCatalogController::class, 'search']);
+        Route::get('/items/stats', [ItemCatalogController::class, 'stats']);
+        Route::get('/items/categories', [ItemCatalogController::class, 'categories']);
+        Route::get('/items/product-groups', [ItemCatalogController::class, 'productGroups']);
+        Route::get('/items/lifecycle-states', [ItemCatalogController::class, 'lifecycleStates']);
+        Route::get('/items/level1-options', [ItemCatalogController::class, 'itemLevel1Options']);
+        Route::get('/items/level2-options', [ItemCatalogController::class, 'itemLevel2Options']);
+        Route::get('/items', [ItemCatalogController::class, 'index']);
 
         Route::get('/reference-data', [ReferenceDataController::class, 'tables']);
         Route::get('/reference-data/{table}/schema', [ReferenceDataController::class, 'schema']);

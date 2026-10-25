@@ -1,6 +1,6 @@
 export type NavIconName =
   | 'dashboard' | 'calendar' | 'wrench' | 'finance' | 'device' | 'invoice'
-  | 'users' | 'settings' | 'list' | 'chevron-left' | 'chevron-right' | 'logout' | 'scale' | 'pulse' | 'route' | 'database' | 'clipboard'
+  | 'users' | 'settings' | 'list' | 'chevron-left' | 'chevron-right' | 'logout' | 'scale' | 'pulse' | 'route' | 'database' | 'clipboard' | 'box'
 
 const PATHS: Record<NavIconName, string> = {
   dashboard:      '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
@@ -20,6 +20,7 @@ const PATHS: Record<NavIconName, string> = {
   route:          '<circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M7.2 7.6C10 10 8 13 12 13s2-3 4.8-.6"/>',
   database:       '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
   clipboard:      '<path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1z"/><rect x="5" y="4" width="14" height="18" rx="2"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="8" y1="19" x2="13" y2="19"/>',
+  box:            '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.73z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
 }
 
 type Props = { name: NavIconName; size?: number }

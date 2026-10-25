@@ -355,6 +355,8 @@ class ErpSalesAttributionService
                 'closedon' => $row->invoice_date,
                 'createdon' => $row->source_created_at ?? $row->invoice_date,
                 'resolved_value' => (float) $row->resolved_value,
+                'sales_order_number' => $row->sales_order_number,
+                'original_sales_order_number' => $row->original_sales_order_number,
                 '_ownerid_value' => $row->owner_id,
                 '_ownerid_value@OData.Community.Display.V1.FormattedValue' => $row->owner_name ?? '',
                 '_owningbusinessunit_value' => $row->team_id,
@@ -383,19 +385,18 @@ class ErpSalesAttributionService
         }
 
         $soNumbers = $invoices->pluck('SalesOrderNumber')->unique()->values();
+        $quoteIdBySo = $this->fetchQuoteIdsBySoNumber($soNumbers, $to);
 
-        $quoteIdBySo = collect();
-        foreach ($soNumbers->chunk(15) as $chunk) {
-            $filter = $chunk->map(fn ($so) => "ordernumber eq '1001{$so}'")->implode(' or ');
-            $data = $this->crm->get('salesorders', [
-                '$select' => 'ordernumber,_quoteid_value',
-                '$filter' => $filter,
-            ], ttl: $this->ttl($to));
+        // SO khong khop CRM truc tiep (vd Returned Order khong co ban ghi salesorders rieng) — thu
+        // tra nguoc ve SO GOC qua InventTransIdReturn tren SalesLine (F&O), roi tra CRM bang SO goc do.
+        $unresolvedSo = $soNumbers->filter(fn ($so) => empty($quoteIdBySo[$so] ?? null));
+        $originalSoByReturnSo = $this->resolveOriginalSalesOrders($unresolvedSo, $to);
 
-            foreach ($data['value'] ?? [] as $so) {
-                $soNumber = substr($so['ordernumber'] ?? '', 4); // bo prefix "1001" (4 ky tu dau)
-                if ($soNumber !== '') {
-                    $quoteIdBySo[$soNumber] = $so['_quoteid_value'] ?? null;
+        if ($originalSoByReturnSo->isNotEmpty()) {
+            $quoteIdByOriginalSo = $this->fetchQuoteIdsBySoNumber($originalSoByReturnSo->values()->unique()->values(), $to);
+            foreach ($originalSoByReturnSo as $returnSo => $originalSo) {
+                if (! empty($quoteIdByOriginalSo[$originalSo] ?? null)) {
+                    $quoteIdBySo[$returnSo] = $quoteIdByOriginalSo[$originalSo];
                 }
             }
         }
@@ -412,7 +413,7 @@ class ErpSalesAttributionService
         }
         $quoteById = $quotes->keyBy('quoteid');
 
-        return $invoices->map(function ($inv) use ($quoteIdBySo, $quoteById) {
+        return $invoices->map(function ($inv) use ($quoteIdBySo, $quoteById, $originalSoByReturnSo) {
             $quoteId = $quoteIdBySo[$inv['SalesOrderNumber']] ?? null;
             $quote = $quoteId ? $quoteById->get($quoteId) : null;
             if (! $quote || empty($quote['_ownerid_value'])) {
@@ -425,12 +426,78 @@ class ErpSalesAttributionService
                 'closedon' => $inv['InvoiceDate'],
                 'createdon' => $quote['createdon'] ?? $inv['InvoiceDate'],
                 'resolved_value' => (float) ($inv['TotalInvoiceAmount'] ?? 0),
+                'sales_order_number' => $inv['SalesOrderNumber'],
+                'original_sales_order_number' => $originalSoByReturnSo->get($inv['SalesOrderNumber']),
                 '_ownerid_value' => $quote['_ownerid_value'],
                 '_ownerid_value@OData.Community.Display.V1.FormattedValue' => $quote['_ownerid_value@OData.Community.Display.V1.FormattedValue'] ?? '',
                 '_owningbusinessunit_value' => $quote['_owningbusinessunit_value'] ?? null,
                 '_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue' => $quote['_owningbusinessunit_value@OData.Community.Display.V1.FormattedValue'] ?? '',
             ];
         })->filter()->values();
+    }
+
+    private function fetchQuoteIdsBySoNumber(Collection $soNumbers, Carbon $to): Collection
+    {
+        $quoteIdBySo = collect();
+        foreach ($soNumbers->chunk(15) as $chunk) {
+            $filter = $chunk->map(fn ($so) => "ordernumber eq '1001{$so}'")->implode(' or ');
+            $data = $this->crm->get('salesorders', [
+                '$select' => 'ordernumber,_quoteid_value',
+                '$filter' => $filter,
+            ], ttl: $this->ttl($to));
+
+            foreach ($data['value'] ?? [] as $so) {
+                $soNumber = substr($so['ordernumber'] ?? '', 4); // bo prefix "1001" (4 ky tu dau)
+                if ($soNumber !== '') {
+                    $quoteIdBySo[$soNumber] = $so['_quoteid_value'] ?? null;
+                }
+            }
+        }
+
+        return $quoteIdBySo;
+    }
+
+    // Tra nguoc Returned Order ve SO GOC qua chuoi InventTransIdReturn tren SalesLine (F&O) —
+    // SalesLineBiEntities co du field giong SELECT dba.SalesLine ben IT da dung de doi chieu tay.
+    // Dong Return co InventTransIdReturn tro ve InventTransId cua dong Sales goc, cung SalesId.
+    private function resolveOriginalSalesOrders(Collection $soNumbers, Carbon $to): Collection
+    {
+        if ($soNumbers->isEmpty()) {
+            return collect();
+        }
+
+        $returnLines = collect();
+        foreach ($soNumbers->chunk(15) as $chunk) {
+            $filter = $chunk->map(fn ($so) => "SalesId eq '{$so}'")->implode(' or ');
+            $data = $this->erp->get('SalesLineBiEntities', [
+                '$select' => 'SalesId,InventTransIdReturn',
+                '$filter' => $filter,
+            ], ttl: $this->ttl($to));
+            $returnLines = $returnLines->merge(
+                collect($data['value'] ?? [])->filter(fn ($l) => ! empty($l['InventTransIdReturn']))
+            );
+        }
+
+        if ($returnLines->isEmpty()) {
+            return collect();
+        }
+
+        $returnTransIds = $returnLines->pluck('InventTransIdReturn')->unique()->values();
+        $originalSoByTransId = collect();
+        foreach ($returnTransIds->chunk(15) as $chunk) {
+            $filter = $chunk->map(fn ($id) => "InventTransId eq '{$id}'")->implode(' or ');
+            $data = $this->erp->get('SalesLineBiEntities', [
+                '$select' => 'SalesId,InventTransId',
+                '$filter' => $filter,
+            ], ttl: $this->ttl($to));
+            foreach ($data['value'] ?? [] as $r) {
+                $originalSoByTransId[$r['InventTransId']] = $r['SalesId'];
+            }
+        }
+
+        return $returnLines
+            ->mapWithKeys(fn ($line) => [$line['SalesId'] => $originalSoByTransId[$line['InventTransIdReturn']] ?? null])
+            ->filter();
     }
 
     // Luong 2/3 (SEV, 1 it B2B - loai B2B ra vi B2B van tinh theo CRM):

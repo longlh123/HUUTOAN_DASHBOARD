@@ -10,6 +10,7 @@ class KpiTeamTarget extends Model
         'year',
         'team_id',
         'team_name',
+        'department',
         'q1',
         'q2',
         'q3',
